@@ -38,7 +38,7 @@ func Nest(nodes []Node) ([]Node, error) {
 		return nil, err
 	}
 	if len(rest) > 0 {
-		return nil, fmt.Errorf("Canvas ast: unexpected tokens after nest")
+		return nil, fmt.Errorf("canvas ast: unexpected tokens after nest")
 	}
 	return out, nil
 }
@@ -72,7 +72,7 @@ func nestUntil(nodes []Node, endName string) (body []Node, rest []Node, err erro
 		body = append(body, d)
 	}
 	if endName != "" {
-		return nil, nil, fmt.Errorf("Canvas ast: missing @%s", endName)
+		return nil, nil, fmt.Errorf("canvas ast: missing @%s", endName)
 	}
 	return body, nil, nil
 }

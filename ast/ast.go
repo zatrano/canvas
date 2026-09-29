@@ -72,7 +72,7 @@ func Parse(tokens []lex.Token) (*Document, error) {
 		case lex.KindDirective:
 			doc.Nodes = append(doc.Nodes, Directive{Name: tok.Name, Args: tok.Args})
 		default:
-			return nil, fmt.Errorf("Canvas ast: unknown token %s", tok.Kind)
+			return nil, fmt.Errorf("canvas ast: unknown token %s", tok.Kind)
 		}
 	}
 	return doc, nil
@@ -806,10 +806,6 @@ func lowerExprIn(expr string, aliases map[string]bool) string {
 		return "dataGet $ `" + path + "`"
 	}
 	return "dataGet . `" + path + "`"
-}
-
-func lowerExpr(expr string) string {
-	return lowerExprIn(expr, nil)
 }
 
 func templateEscape(s string) string {

@@ -47,7 +47,10 @@ func (w *Writer) Bytes() []byte        { return w.b }
 func (w *Writer) String() string       { return string(w.b) }
 func (w *Writer) Write(p []byte)       { w.b = append(w.b, p...) }
 func (w *Writer) WriteString(s string) { w.b = append(w.b, s...) }
-func (w *Writer) WriteByte(c byte)     { w.b = append(w.b, c) }
+func (w *Writer) WriteByte(c byte) error {
+	w.b = append(w.b, c)
+	return nil
+}
 
 var writerPool = sync.Pool{New: func() any { return &Writer{b: make([]byte, 0, 1024)} }}
 
@@ -236,7 +239,7 @@ func (p *Program) exec(w *Writer, ctx *Ctx, pc, end int) (int, error) {
 		case OpElse, OpEnd, OpRangeEnd:
 			return pc, nil
 		default:
-			return pc, fmt.Errorf("Canvas rt: unknown op %d", op.Kind)
+			return pc, fmt.Errorf("canvas rt: unknown op %d", op.Kind)
 		}
 	}
 	return pc, nil

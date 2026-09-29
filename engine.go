@@ -177,15 +177,15 @@ func (e *Engine) compileFast(name string) (*rt.Compiled, error) {
 
 	resolved, err := e.resolveView(name, nil)
 	if err != nil {
-		return nil, fmt.Errorf("Canvas template [%s] (%s): %w", name, e.pathFor(name), err)
+		return nil, fmt.Errorf("canvas template [%s] (%s): %w", name, e.pathFor(name), err)
 	}
 	doc, err := ast.ParseSource(resolved)
 	if err != nil {
-		return nil, fmt.Errorf("Canvas template [%s] (%s): %w", name, e.pathFor(name), err)
+		return nil, fmt.Errorf("canvas template [%s] (%s): %w", name, e.pathFor(name), err)
 	}
 	prog, ok, err := rt.CompileFunc(doc, env)
 	if err != nil {
-		return nil, fmt.Errorf("Canvas template [%s] (%s) rt compile: %w", name, e.pathFor(name), err)
+		return nil, fmt.Errorf("canvas template [%s] (%s) rt compile: %w", name, e.pathFor(name), err)
 	}
 	if !ok {
 		if e.cacheOn {
@@ -220,16 +220,16 @@ func (e *Engine) compileHTML(name string) (*template.Template, error) {
 
 	resolved, err := e.resolveView(name, nil)
 	if err != nil {
-		return nil, fmt.Errorf("Canvas template [%s] (%s): %w", name, e.pathFor(name), err)
+		return nil, fmt.Errorf("canvas template [%s] (%s): %w", name, e.pathFor(name), err)
 	}
 
 	parsed, err := e.compileView(resolved)
 	if err != nil {
-		return nil, fmt.Errorf("Canvas template [%s] (%s) compile error: %w", name, e.pathFor(name), err)
+		return nil, fmt.Errorf("canvas template [%s] (%s) compile error: %w", name, e.pathFor(name), err)
 	}
 	tmpl, err := template.New(name).Funcs(funcMap).Parse(parsed)
 	if err != nil {
-		return nil, fmt.Errorf("Canvas template [%s] (%s) parse error: %w", name, e.pathFor(name), err)
+		return nil, fmt.Errorf("canvas template [%s] (%s) parse error: %w", name, e.pathFor(name), err)
 	}
 
 	if e.cacheOn {
@@ -239,11 +239,6 @@ func (e *Engine) compileHTML(name string) (*template.Template, error) {
 	}
 
 	return tmpl, nil
-}
-
-// compile is kept for tests that compile through the html/template pipeline.
-func (e *Engine) compile(name string) (*template.Template, error) {
-	return e.compileHTML(name)
 }
 
 func (e *Engine) pathFor(name string) string {

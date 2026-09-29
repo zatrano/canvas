@@ -57,7 +57,7 @@ func (c *compiler) emit(n ast.Node) error {
 	case ast.Block:
 		return c.emitBlock(x)
 	default:
-		return fmt.Errorf("Canvas rt: unsupported node")
+		return fmt.Errorf("canvas rt: unsupported node")
 	}
 	return nil
 }
@@ -92,9 +92,9 @@ func (c *compiler) emitDirective(d ast.Directive) error {
 		parts := splitArgs(d.Args)
 		c.ops = append(c.ops, Op{Kind: OpChoice, S: strings.Trim(parts[0], `'" `), Path: SplitPath(parts[1])})
 	case "elseif", "else", "empty":
-		return fmt.Errorf("Canvas rt: unexpected @%s", d.Name)
+		return fmt.Errorf("canvas rt: unexpected @%s", d.Name)
 	default:
-		return fmt.Errorf("Canvas rt: unsupported @%s", d.Name)
+		return fmt.Errorf("canvas rt: unsupported @%s", d.Name)
 	}
 	return nil
 }
@@ -128,14 +128,14 @@ func (c *compiler) emitBlock(b ast.Block) error {
 	case "production":
 		return c.emitCond(OpIfProduction, nil, "", b.Body)
 	default:
-		return fmt.Errorf("Canvas rt: unsupported block @%s", b.Name)
+		return fmt.Errorf("canvas rt: unsupported block @%s", b.Name)
 	}
 }
 
 func (c *compiler) emitForeach(b ast.Block, forelse bool) error {
 	coll, key, alias, ok := parseForeach(b.Args)
 	if !ok {
-		return fmt.Errorf("Canvas rt: bad @foreach args")
+		return fmt.Errorf("canvas rt: bad @foreach args")
 	}
 	body := b.Body
 	var emptyBody []ast.Node
@@ -143,7 +143,7 @@ func (c *compiler) emitForeach(b ast.Block, forelse bool) error {
 		var okSplit bool
 		body, emptyBody, okSplit = splitEmpty(body)
 		if !okSplit {
-			return fmt.Errorf("Canvas rt: @forelse missing @empty")
+			return fmt.Errorf("canvas rt: @forelse missing @empty")
 		}
 		// if truthy(coll) { range } else { empty }
 		return c.emitCondWithBranches(

@@ -143,7 +143,7 @@ func (l *lexer) scanDirective() error {
 	if l.pos < len(l.src) && l.src[l.pos] == '(' {
 		argStart := l.pos
 		if err := l.skipBalanced('(', ')'); err != nil {
-			return fmt.Errorf("Canvas lex line %d:%d: %w", startLine, startCol, err)
+			return fmt.Errorf("canvas lex line %d:%d: %w", startLine, startCol, err)
 		}
 		inner := l.src[argStart+1 : l.pos-1]
 		args = strings.TrimSpace(inner)
@@ -175,7 +175,7 @@ func (l *lexer) scanEcho() error {
 		}
 		l.advance()
 	}
-	return fmt.Errorf("Canvas lex line %d:%d: unclosed {{", startLine, startCol)
+	return fmt.Errorf("canvas lex line %d:%d: unclosed {{", startLine, startCol)
 }
 
 func (l *lexer) scanRawEcho() error {
@@ -197,7 +197,7 @@ func (l *lexer) scanRawEcho() error {
 		}
 		l.advance()
 	}
-	return fmt.Errorf("Canvas lex line %d:%d: unclosed {!!", startLine, startCol)
+	return fmt.Errorf("canvas lex line %d:%d: unclosed raw echo", startLine, startCol)
 }
 
 func (l *lexer) scanComment() error {
@@ -219,7 +219,7 @@ func (l *lexer) scanComment() error {
 		}
 		l.advance()
 	}
-	return fmt.Errorf("Canvas lex line %d:%d: unclosed {{--", startLine, startCol)
+	return fmt.Errorf("canvas lex line %d:%d: unclosed {{--", startLine, startCol)
 }
 
 func (l *lexer) skipBalanced(open, close byte) error {

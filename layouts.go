@@ -76,7 +76,7 @@ func (e *Engine) resolveViewBody(name string, seen []string, bags map[string]*st
 
 	raw, err := os.ReadFile(e.pathFor(name))
 	if err != nil {
-		return "", fmt.Errorf("Canvas template [%s] not found at %s", name, e.pathFor(name))
+		return "", fmt.Errorf("canvas template [%s] not found at %s", name, e.pathFor(name))
 	}
 	content := string(raw)
 	content, err = e.expandIncludes(content, seen, bags, once)

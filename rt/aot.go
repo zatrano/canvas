@@ -262,7 +262,7 @@ func buildNode(n ast.Node, env string) (RenderFunc, int, error) {
 	case ast.Block:
 		return buildBlock(x, env)
 	default:
-		return nil, 0, fmt.Errorf("Canvas aot: unsupported node")
+		return nil, 0, fmt.Errorf("canvas aot: unsupported node")
 	}
 }
 
@@ -329,7 +329,7 @@ func buildDirective(d ast.Directive) (RenderFunc, int, error) {
 			writeEscaped(w, transRoot(root, key))
 		}, 8, nil
 	default:
-		return nil, 0, fmt.Errorf("Canvas aot: unsupported @%s", d.Name)
+		return nil, 0, fmt.Errorf("canvas aot: unsupported @%s", d.Name)
 	}
 }
 
@@ -440,14 +440,14 @@ func buildBlock(b ast.Block, env string) (RenderFunc, int, error) {
 			}
 		}, h, nil
 	default:
-		return nil, 0, fmt.Errorf("Canvas aot: unsupported block @%s", b.Name)
+		return nil, 0, fmt.Errorf("canvas aot: unsupported block @%s", b.Name)
 	}
 }
 
 func buildForeach(b ast.Block, env string, forelse bool) (RenderFunc, int, error) {
 	coll, keyAlias, valAlias, ok := parseForeach(b.Args)
 	if !ok {
-		return nil, 0, fmt.Errorf("Canvas aot: bad foreach")
+		return nil, 0, fmt.Errorf("canvas aot: bad foreach")
 	}
 	bodyNodes := b.Body
 	var emptyNodes []ast.Node
@@ -455,7 +455,7 @@ func buildForeach(b ast.Block, env string, forelse bool) (RenderFunc, int, error
 		var okSplit bool
 		bodyNodes, emptyNodes, okSplit = splitEmpty(bodyNodes)
 		if !okSplit {
-			return nil, 0, fmt.Errorf("Canvas aot: forelse missing @empty")
+			return nil, 0, fmt.Errorf("canvas aot: forelse missing @empty")
 		}
 	}
 	var emptyFn RenderFunc
@@ -601,10 +601,8 @@ func runMapSliceW(w *Writer, root map[string]any, keyAlias, valAlias string, ite
 	// nested
 	prev := w.aliases
 	child := make(map[string]any, 4)
-	if prev != nil {
-		for k, v := range prev {
-			child[k] = v
-		}
+	for k, v := range prev {
+		child[k] = v
 	}
 	if w.hasRV {
 		child[w.rk] = w.rv
@@ -681,10 +679,8 @@ func runAnySliceW(w *Writer, root map[string]any, keyAlias, valAlias string, ite
 	}
 	prev := w.aliases
 	child := make(map[string]any, 4)
-	if prev != nil {
-		for k, v := range prev {
-			child[k] = v
-		}
+	for k, v := range prev {
+		child[k] = v
 	}
 	w.aliases = child
 	for i := 0; i < len(items); i++ {
