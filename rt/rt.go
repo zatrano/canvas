@@ -47,10 +47,7 @@ func (w *Writer) Bytes() []byte        { return w.b }
 func (w *Writer) String() string       { return string(w.b) }
 func (w *Writer) Write(p []byte)       { w.b = append(w.b, p...) }
 func (w *Writer) WriteString(s string) { w.b = append(w.b, s...) }
-func (w *Writer) WriteByte(c byte) error {
-	w.b = append(w.b, c)
-	return nil
-}
+func (w *Writer) AppendByte(c byte)    { w.b = append(w.b, c) }
 
 var writerPool = sync.Pool{New: func() any { return &Writer{b: make([]byte, 0, 1024)} }}
 
@@ -197,7 +194,7 @@ func (p *Program) exec(w *Writer, ctx *Ctx, pc, end int) (int, error) {
 		case OpAttrBool:
 			v := resolve(ctx, op.Path)
 			if truthy(v) {
-				w.WriteByte(' ')
+				w.AppendByte(' ')
 				w.WriteString(op.S)
 			}
 			pc++
@@ -774,7 +771,7 @@ func writeEscapedStringSlow(w *Writer, s string) {
 		case '\'':
 			w.WriteString("&#39;")
 		default:
-			w.WriteByte(s[i])
+			w.AppendByte(s[i])
 		}
 	}
 }
@@ -785,9 +782,9 @@ func writeJSON(w *Writer, v any) {
 	case nil:
 		w.WriteString("null")
 	case string:
-		w.WriteByte('"')
+		w.AppendByte('"')
 		writeJSONString(w, x)
-		w.WriteByte('"')
+		w.AppendByte('"')
 	case int:
 		w.WriteString(strconv.Itoa(x))
 	case bool:
@@ -805,8 +802,8 @@ func writeJSONString(w *Writer, s string) {
 	for i := 0; i < len(s); i++ {
 		switch c := s[i]; c {
 		case '"', '\\':
-			w.WriteByte('\\')
-			w.WriteByte(c)
+			w.AppendByte('\\')
+			w.AppendByte(c)
 		case '\n':
 			w.WriteString(`\n`)
 		case '\r':
@@ -814,7 +811,7 @@ func writeJSONString(w *Writer, s string) {
 		case '\t':
 			w.WriteString(`\t`)
 		default:
-			w.WriteByte(c)
+			w.AppendByte(c)
 		}
 	}
 }
@@ -832,7 +829,7 @@ func writeClassAttr(w *Writer, v any) {
 				continue
 			}
 			if !first {
-				w.WriteByte(' ')
+				w.AppendByte(' ')
 			}
 			first = false
 			w.WriteString(k)
@@ -851,11 +848,11 @@ func writeStyleAttr(w *Writer, v any) {
 				continue
 			}
 			if !first {
-				w.WriteByte(';')
+				w.AppendByte(';')
 			}
 			first = false
 			w.WriteString(k)
-			w.WriteByte(':')
+			w.AppendByte(':')
 			w.WriteString(fmt.Sprint(val))
 		}
 	}

@@ -303,7 +303,7 @@ func buildDirective(d ast.Directive) (RenderFunc, int, error) {
 		name := d.Name
 		return func(w *Writer, root map[string]any) {
 			if truthy(wLookup(w, root, path)) {
-				w.WriteByte(' ')
+				w.AppendByte(' ')
 				w.WriteString(name)
 			}
 		}, 8, nil

@@ -189,7 +189,7 @@ func rtWriteEsc(w *rt.Writer, s string) {
 				case '\'':
 					w.WriteString("&#39;")
 				default:
-					w.WriteByte(s[j])
+					w.AppendByte(s[j])
 				}
 			}
 			return

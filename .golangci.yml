@@ -1,7 +1,82 @@
+# golangci-lint v2 configuration for canvas
 version: "2"
-linters:
-  default: standard
-  disable:
-    - errcheck # hot-path Write helpers intentionally ignore error for []byte buffers
+
 run:
-  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - unconvert
+    - revive
+    - durationcheck
+    - makezero
+    - nilerr
+    - errorlint
+    - gosec
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+          disabled: true
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+    misspell:
+      locale: US
+    staticcheck:
+      checks:
+        - all
+        - "-QF1001"
+        - "-ST1000"
+    gosec:
+      excludes:
+        - G104
+        - G203
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
