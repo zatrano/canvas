@@ -161,7 +161,7 @@ func (c *compiler) emitForeach(b ast.Block, forelse bool) error {
 
 func (c *compiler) emitRange(coll, key, alias string, body []ast.Node) error {
 	rangePC := len(c.ops)
-	c.ops = append(c.ops, Op{Kind: OpRange, Path: SplitPath("$"+coll), Key: key, Val: alias})
+	c.ops = append(c.ops, Op{Kind: OpRange, Path: SplitPath("$" + coll), Key: key, Val: alias})
 	if err := c.emitNodes(body); err != nil {
 		return err
 	}

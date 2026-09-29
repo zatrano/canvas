@@ -82,15 +82,17 @@ func buildFunc(nodes []ast.Node, env string) (RenderFunc, int, error) {
 }
 
 // tryFuseListPage collapses the common SSR shape into one closure:
-//   [text] {{ $title }} [text] @foreach($items as $item) … $item.field … @endforeach [text]
+//
+//	[text] {{ $title }} [text] @foreach($items as $item) … $item.field … @endforeach [text]
+//
 // One map resolve for title + items; zero per-node calls.
 func tryFuseListPage(nodes []ast.Node) (RenderFunc, int, bool) {
 	type seg struct {
-		kind  byte // 0 static, 1 echo key, 2 foreach
+		kind   byte // 0 static, 1 echo key, 2 foreach
 		static []byte
-		key   string
-		coll  []string
-		loop  []inlineSeg
+		key    string
+		coll   []string
+		loop   []inlineSeg
 	}
 	segs := make([]seg, 0, len(nodes))
 	hint := 0
@@ -499,9 +501,9 @@ func buildForeach(b ast.Block, env string, forelse bool) (RenderFunc, int, error
 }
 
 type inlineSeg struct {
-	static []byte
-	field  string
-	raw    bool
+	static  []byte
+	field   string
+	raw     bool
 	isField bool
 }
 

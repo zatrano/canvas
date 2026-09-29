@@ -16,18 +16,18 @@ func (Block) node() {}
 
 // openers that require a matching end* closer.
 var blockEnd = map[string]string{
-	"foreach": "endforeach",
-	"forelse": "endforelse",
-	"if":      "endif",
-	"unless":  "endunless",
-	"isset":   "endisset",
-	"empty":   "endempty",
-	"auth":    "endauth",
-	"guest":   "endguest",
-	"error":   "enderror",
-	"can":     "endcan",
-	"cannot":  "endcannot",
-	"env":     "endenv",
+	"foreach":    "endforeach",
+	"forelse":    "endforelse",
+	"if":         "endif",
+	"unless":     "endunless",
+	"isset":      "endisset",
+	"empty":      "endempty",
+	"auth":       "endauth",
+	"guest":      "endguest",
+	"error":      "enderror",
+	"can":        "endcan",
+	"cannot":     "endcannot",
+	"env":        "endenv",
 	"production": "endproduction",
 }
 

@@ -2,7 +2,32 @@
 
 Independent HTML template engine for Go. Zero framework dependencies.
 
-**Status: v0.1.0 (experimental).** Blade-class syntax, native AOT hot path. On the list-page bench, Canvas typed beats [quicktemplate](https://github.com/valyala/quicktemplate) by ~3× — see [docs/performance.md](docs/performance.md).
+[![Tests](https://github.com/zatrano/canvas/actions/workflows/tests.yml/badge.svg)](https://github.com/zatrano/canvas/actions/workflows/tests.yml)
+[![Static Analysis](https://github.com/zatrano/canvas/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/zatrano/canvas/actions/workflows/static-analysis.yml)
+[![Coding Style](https://github.com/zatrano/canvas/actions/workflows/coding-style.yml/badge.svg)](https://github.com/zatrano/canvas/actions/workflows/coding-style.yml)
+[![Security](https://github.com/zatrano/canvas/actions/workflows/security.yml/badge.svg)](https://github.com/zatrano/canvas/actions/workflows/security.yml)
+[![Performance](https://github.com/zatrano/canvas/actions/workflows/performance.yml/badge.svg)](https://github.com/zatrano/canvas/actions/workflows/performance.yml)
+
+[![gosec](https://img.shields.io/badge/gosec-enabled-E34C26?logo=go&logoColor=white)](https://github.com/zatrano/canvas/actions/workflows/security.yml)
+[![govulncheck](https://img.shields.io/badge/govulncheck-enabled-00ADD8?logo=go&logoColor=white)](https://github.com/zatrano/canvas/actions/workflows/security.yml)
+[![Semgrep](https://img.shields.io/badge/Semgrep-enabled-1B2A4E?logo=semgrep&logoColor=white)](https://github.com/zatrano/canvas/actions/workflows/security.yml)
+[![Trivy](https://img.shields.io/badge/Trivy-enabled-1904DA?logo=aquasecurity&logoColor=white)](https://github.com/zatrano/canvas/actions/workflows/security.yml)
+
+[![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/github/v/tag/zatrano/canvas?filter=v*&sort=semver&label=version&color=blue)](https://github.com/zatrano/canvas/releases/tag/v0.1.0)
+[![Latest Release](https://img.shields.io/github/v/release/zatrano/canvas?display_name=tag&label=latest&color=brightgreen)](https://github.com/zatrano/canvas/releases/latest)
+[![Security Policy](https://img.shields.io/badge/Security-Policy-red?logo=github)](SECURITY.md)
+
+[![Typed](https://img.shields.io/badge/Typed%20list-502%20ns-2ea44f?style=flat-square)](#benchmarks)
+[![vs QT](https://img.shields.io/badge/vs%20quicktemplate-~3.6×-2ea44f?style=flat-square)](#benchmarks)
+[![Dynamic](https://img.shields.io/badge/Dynamic%20RenderTo-1147%20ns-0366d6?style=flat-square)](#benchmarks)
+[![Allocs](https://img.shields.io/badge/RenderTo-0%20alloc-2ea44f?style=flat-square)](#benchmarks)
+[![Deps](https://img.shields.io/badge/Runtime%20deps-0-lightgrey?style=flat-square)](go.mod)
+
+---
+
+**Status: v0.1.0 (experimental).** Blade-class syntax, native AOT hot path. On the list-page bench, Canvas typed beats [quicktemplate](https://github.com/valyala/quicktemplate) by ~3× — see [docs/performance.md](docs/performance.md). Read [SECURITY.md](SECURITY.md) before production exposure.
 
 ```text
 Your app / framework
@@ -84,6 +109,7 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 | [Concepts](docs/concepts.md) | Engine / AST / AOT / Writer |
 | [Directives](docs/directives.md) | Blade-class catalog |
 | [Performance](docs/performance.md) | Benchmarks + CI gates |
+| [Security](SECURITY.md) | Policy + operator guidance |
 
 ## Benchmarks
 
@@ -134,10 +160,11 @@ Canvas is **not** a quicktemplate fork. Full tables: [docs/performance.md](docs/
 
 | Job | What |
 |-----|------|
-| unit | `go test ./...` |
-| gate | typed/dynamic vs QT + legacy + 0-alloc |
-| race | `go test -race ./...` |
-| bench | optional microbench job |
+| [Tests](.github/workflows/tests.yml) | unit + race + coverage + build |
+| [Performance](.github/workflows/performance.yml) | Gate vs QT + microbench |
+| [Security](.github/workflows/security.yml) | gosec · govulncheck · Semgrep · Trivy |
+| [Static Analysis](.github/workflows/static-analysis.yml) | staticcheck |
+| [Coding Style](.github/workflows/coding-style.yml) | gofmt · vet · golangci-lint |
 
 ## Used by
 

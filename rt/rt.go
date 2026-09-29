@@ -28,11 +28,11 @@ type Ctx struct {
 type Writer struct {
 	b []byte
 	// Hot range frame (top-level foreach); nested uses Aliases on demand.
-	hasRV bool
-	rv    any
-	rk    string // value alias name
-	ri    any
-	rki   string // key alias name
+	hasRV   bool
+	rv      any
+	rk      string // value alias name
+	ri      any
+	rki     string // key alias name
 	aliases map[string]any
 }
 
@@ -43,11 +43,11 @@ func (w *Writer) Reset() {
 	w.ri = nil
 	w.aliases = nil
 }
-func (w *Writer) Bytes() []byte   { return w.b }
-func (w *Writer) String() string  { return string(w.b) }
-func (w *Writer) Write(p []byte)  { w.b = append(w.b, p...) }
+func (w *Writer) Bytes() []byte        { return w.b }
+func (w *Writer) String() string       { return string(w.b) }
+func (w *Writer) Write(p []byte)       { w.b = append(w.b, p...) }
 func (w *Writer) WriteString(s string) { w.b = append(w.b, s...) }
-func (w *Writer) WriteByte(c byte) { w.b = append(w.b, c) }
+func (w *Writer) WriteByte(c byte)     { w.b = append(w.b, c) }
 
 var writerPool = sync.Pool{New: func() any { return &Writer{b: make([]byte, 0, 1024)} }}
 
