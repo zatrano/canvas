@@ -424,9 +424,9 @@ func (p *ifParser) parseTernary() (string, error) {
 	}
 	if p.cur.kind == ifTokColon {
 		p.eat()
-		alt, err := p.parseTernary()
-		if err != nil {
-			return "", err
+		alt, aerr := p.parseTernary()
+		if aerr != nil {
+			return "", aerr
 		}
 		return fmt.Sprintf("(ifElvis %s %s)", cond, alt), nil
 	}
