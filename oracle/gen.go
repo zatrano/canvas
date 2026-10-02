@@ -141,7 +141,7 @@ const (
 	CtxVerbatimOpenScript // @verbatim <script> @endverbatim then echo
 	CtxVerbatimOpenStyle
 	CtxTemplateCommentScript // {{-- <script> --}} then echo
-	CtxAttrsBag          // <div @attrs($m)>
+	CtxAttrsBag              // <div @attrs($m)>
 )
 
 func (c ContextKind) String() string {
@@ -411,9 +411,9 @@ func buildComboTmpl(ctx ContextKind, attr string, pos PositionKind, expr ExprKin
 
 // LegacyProbeCases are known-vulnerable patterns under EscapeLegacy.
 type LegacyProbe struct {
-	Ctx     string
-	Tmpl    string
-	Payload map[string]any
+	Ctx      string
+	Tmpl     string
+	Payload  map[string]any
 	WantKind string // expected finding kind substring
 }
 
@@ -421,15 +421,15 @@ type LegacyProbe struct {
 func LegacyProbes() []LegacyProbe {
 	return []LegacyProbe{
 		{
-			Ctx: "unquoted-attr",
-			Tmpl: `<div title={{ $x }}>`,
-			Payload: map[string]any{"x": `x onmouseover=alert(1)`},
+			Ctx:      "unquoted-attr",
+			Tmpl:     `<div title={{ $x }}>`,
+			Payload:  map[string]any{"x": `x onmouseover=alert(1)`},
 			WantKind: "on-attr",
 		},
 		{
-			Ctx: "javascript-url",
-			Tmpl: `<a href="{{ $x }}">`,
-			Payload: map[string]any{"x": `javascript:alert(1)`},
+			Ctx:      "javascript-url",
+			Tmpl:     `<a href="{{ $x }}">`,
+			Payload:  map[string]any{"x": `javascript:alert(1)`},
 			WantKind: "unsafe-url",
 		},
 		{
@@ -445,9 +445,9 @@ func LegacyProbes() []LegacyProbe {
 			WantKind: "script",
 		},
 		{
-			Ctx: "onclick",
-			Tmpl: `<a onclick="{{ $x }}">`,
-			Payload: map[string]any{"x": `alert(1)`},
+			Ctx:      "onclick",
+			Tmpl:     `<a onclick="{{ $x }}">`,
+			Payload:  map[string]any{"x": `alert(1)`},
 			WantKind: "", // Legacy may HTML-escape but still set onclick — skeleton/on may vary; shape has onclick
 		},
 		{
@@ -463,9 +463,9 @@ func LegacyProbes() []LegacyProbe {
 			WantKind: "script",
 		},
 		{
-			Ctx: "tab-javascript-url",
-			Tmpl: `<a href="{{ $x }}">`,
-			Payload: map[string]any{"x": "java\tscript:alert(1)"},
+			Ctx:      "tab-javascript-url",
+			Tmpl:     `<a href="{{ $x }}">`,
+			Payload:  map[string]any{"x": "java\tscript:alert(1)"},
 			WantKind: "unsafe-url",
 		},
 	}

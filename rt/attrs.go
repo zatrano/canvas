@@ -74,10 +74,7 @@ func attrNameAllowed(name string) bool {
 	case "srcdoc", "style", "srcset":
 		return false
 	}
-	if strings.HasPrefix(lower, "xmlns") {
-		return false
-	}
-	return true
+	return !strings.HasPrefix(lower, "xmlns")
 }
 
 func attrsBoolSkip(v any) (skip bool, isBool bool) {

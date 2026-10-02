@@ -25,8 +25,8 @@ const (
 	EscUnquoted
 	EscJSON
 	EscJSONAttr
-	EscURLBlock // mid-URL interpolation without safe static lock → always #unsafe
-	EscCSS      // style attr declaration value after ':' — filtered charset
+	EscURLBlock    // mid-URL interpolation without safe static lock → always #unsafe
+	EscCSS         // style attr declaration value after ':' — filtered charset
 	EscURLUnquoted // URL attr in unquoted context: scheme filter + space escape
 	EscForbid      // Strict: reject at compile time
 )
@@ -485,13 +485,6 @@ func consumeEndTag(s string, i int, name string) (int, bool) {
 
 func isHTMLSpace(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'
-}
-
-func hasFoldPrefix(s, prefix string) bool {
-	if len(s) < len(prefix) {
-		return false
-	}
-	return strings.EqualFold(s[:len(prefix)], prefix)
 }
 
 // EscapeURLAttr normalizes a URL attribute value for Strict mode.

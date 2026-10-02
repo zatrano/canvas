@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"testing"
 
 	"github.com/zatrano/canvas"
@@ -55,13 +54,4 @@ func TestEscape_AOTStructureStrictEqualsLegacy(t *testing.T) {
 	_ = cs
 	_ = cl
 	t.Log("list-page AOT output identical under Strict and Legacy (structure-equivalent for EscHTML-only sites)")
-}
-
-func medianInts(xs []int) float64 {
-	sort.Ints(xs)
-	n := len(xs)
-	if n%2 == 0 {
-		return float64(xs[n/2-1]+xs[n/2]) / 2
-	}
-	return float64(xs[n/2])
 }

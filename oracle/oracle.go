@@ -94,8 +94,8 @@ type InjectionFinding struct {
 // Skeleton is an ordered DOM structural fingerprint.
 type Skeleton struct {
 	// ElemAttrs is ordered "tag" then "tag@attr" entries for each start tag.
-	Seq           []string
-	ElemCount     int
+	Seq            []string
+	ElemCount      int
 	ScriptLenClass int // 0=empty, 1=short(<32), 2=med(<256), 3=long
 	StyleLenClass  int
 }
