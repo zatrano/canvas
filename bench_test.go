@@ -145,7 +145,7 @@ func BenchmarkHTMLTemplateDataGet(b *testing.B) {
 }
 
 // BenchmarkCeilingQTStyle is the theoretical floor: typed data, no maps, no
-// engine — what code-generated engines (quicktemplate-class) approximate.
+// engine — what hand-written code-generated engines approximate.
 // Canvas must stay within a small factor of this on the same HTML shape.
 func BenchmarkCeilingQTStyle(b *testing.B) {
 	type item struct{ Name string }

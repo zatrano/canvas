@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+
+	"github.com/zatrano/canvas/rt"
 )
 
 type ifTokKind int
@@ -866,8 +868,15 @@ func findNextIfCall(s string, from int) int {
 	return -1
 }
 
-func compileEchoExpressions(out string) string {
+func compileEchoExpressions(out string, mode rt.EscapeMode, verbatim map[string]string) (string, error) {
+	expandShadow := func(s string) string {
+		for k, v := range verbatim {
+			s = strings.ReplaceAll(s, k, v)
+		}
+		return s
+	}
 	var b strings.Builder
+	var shadow strings.Builder // static prefix with InterpMarker after each echo (multi-URL)
 	i := 0
 	for i < len(out) {
 		start, raw, ok := findEchoOpen(out, i)
@@ -876,15 +885,18 @@ func compileEchoExpressions(out string) string {
 			break
 		}
 		b.WriteString(out[i:start])
+		shadow.WriteString(out[i:start])
 		inner, end, found := readEcho(out, start, raw)
 		if !found {
 			b.WriteByte(out[start])
+			shadow.WriteByte(out[start])
 			i = start + 1
 			continue
 		}
 		compiled, err := compileIfInner(strings.TrimSpace(inner))
 		if err != nil {
 			b.WriteString(out[start:end])
+			shadow.WriteString(out[start:end])
 			i = end
 			continue
 		}
@@ -892,14 +904,43 @@ func compileEchoExpressions(out string) string {
 			b.WriteString("{{ safeStr ")
 			b.WriteString(compiled)
 			b.WriteString(" }}")
+			shadow.WriteString(rt.InterpMarker)
 		} else {
-			b.WriteString("{{ ")
-			b.WriteString(compiled)
-			b.WriteString(" }}")
+			kind, ctx := rt.ScanEscapeDetail(expandShadow(shadow.String()), false, mode)
+			switch kind {
+			case rt.EscForbid:
+				line, col := rt.LineCol(out, start)
+				return "", rt.FormatForbidError("", line, col, ctx)
+			case rt.EscURLAttr:
+				b.WriteString("{{ canvasURL ")
+				b.WriteString(compiled)
+				b.WriteString(" }}")
+			case rt.EscURLBlock:
+				b.WriteString("{{ canvasURLBlock ")
+				b.WriteString(compiled)
+				b.WriteString(" }}")
+			case rt.EscUnquoted:
+				b.WriteString("{{ canvasUnquoted ")
+				b.WriteString(compiled)
+				b.WriteString(" }}")
+			case rt.EscCSS:
+				b.WriteString("{{ canvasCSS ")
+				b.WriteString(compiled)
+				b.WriteString(" }}")
+			case rt.EscURLUnquoted:
+				b.WriteString("{{ canvasURLUnquoted ")
+				b.WriteString(compiled)
+				b.WriteString(" }}")
+			default:
+				b.WriteString("{{ ")
+				b.WriteString(compiled)
+				b.WriteString(" }}")
+			}
+			shadow.WriteString(rt.InterpMarker)
 		}
 		i = end
 	}
-	return b.String()
+	return b.String(), nil
 }
 
 func findEchoOpen(s string, from int) (start int, raw bool, ok bool) {

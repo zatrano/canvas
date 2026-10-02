@@ -58,7 +58,7 @@ func TestLowerLeafDirectives(t *testing.T) {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
 	want := []string{
-		"trans (dataGet $ `locale`) `shop.add`",
+		"canvasTrans $ `shop.add`",
 		"json (dataGet . `payload`)",
 		"classAttr (dataGet . `cls`)",
 		"attrBool (dataGet . `on`) `checked`",

@@ -2,12 +2,12 @@ package canvas
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
-	"os"
-	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 
@@ -29,6 +29,14 @@ type Engine struct {
 	fastMiss    map[string]struct{}
 	cacheOn     bool
 	composers   []composerEntry
+	escapeMode  rt.EscapeMode
+	// langEscapeCatalog when true HTML-escapes @lang catalog strings (tenant-editable catalogs).
+	// Default false: catalog markup trusted in text; params always escaped.
+	langEscapeCatalog bool
+	// preferHTML forces the regex html/template compile path (skip AOT + AST Lower).
+	preferHTML bool
+	// MaxNestingDepth limits nested @if/@foreach/… (0 → ast.DefaultMaxNestingDepth).
+	MaxNestingDepth int
 }
 
 // New creates a Canvas template engine rooted at directory.
@@ -43,6 +51,7 @@ func New(directory string) *Engine {
 		fastCache:   make(map[string]*rt.Compiled),
 		fastMiss:    make(map[string]struct{}),
 		cacheOn:     true, // production default: compiled programs stay hot
+		escapeMode:  rt.EscapeStrict,
 	}
 	e.funcMap["viewExists"] = func(name string) bool {
 		return e.Exists(name)
@@ -74,6 +83,61 @@ func (e *Engine) AddFunc(name string, fn any) {
 	e.funcMap[name] = fn
 }
 
+// SetEscapeMode selects Strict (default) or Legacy contextual escaping.
+func (e *Engine) SetEscapeMode(mode rt.EscapeMode) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.escapeMode = mode
+	e.cache = make(map[string]*template.Template)
+	e.fastCache = make(map[string]*rt.Compiled)
+	e.fastMiss = make(map[string]struct{})
+}
+
+// SetLangEscapeCatalog controls whether @lang catalog strings are HTML-escaped.
+// Default false (HTML in translations works in text). When true,
+// the catalog is escaped too (use if tenants can edit translation tables).
+// Replacement parameter values are always HTML-escaped regardless of this flag.
+func (e *Engine) SetLangEscapeCatalog(escape bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.langEscapeCatalog = escape
+	e.cache = make(map[string]*template.Template)
+	e.fastCache = make(map[string]*rt.Compiled)
+	e.fastMiss = make(map[string]struct{})
+}
+
+// LangEscapeCatalog reports whether @lang catalogs are HTML-escaped.
+func (e *Engine) LangEscapeCatalog() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.langEscapeCatalog
+}
+
+// PreferHTMLPath forces the regex/html-template compile path; for testing and
+// path-equivalence checks; output must be identical to the default path.
+func (e *Engine) PreferHTMLPath(v bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.preferHTML = v
+	e.cache = make(map[string]*template.Template)
+	e.fastCache = make(map[string]*rt.Compiled)
+	e.fastMiss = make(map[string]struct{})
+}
+
+// EscapeMode returns the current escape mode.
+func (e *Engine) EscapeMode() rt.EscapeMode {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.escapeMode
+}
+
+func (e *Engine) nestingLimit() int {
+	if e.MaxNestingDepth > 0 {
+		return e.MaxNestingDepth
+	}
+	return ast.DefaultMaxNestingDepth
+}
+
 // EnableCache toggles compiled template caching.
 func (e *Engine) EnableCache(enabled bool) {
 	e.cacheOn = enabled
@@ -88,10 +152,9 @@ func (e *Engine) ClearCache() {
 	e.fastMiss = make(map[string]struct{})
 }
 
-// Exists reports whether a template exists.
+// Exists reports whether a template exists under the engine root.
 func (e *Engine) Exists(name string) bool {
-	_, err := os.Stat(e.pathFor(name))
-	return err == nil
+	return e.templateExists(name)
 }
 
 // Render renders a template to a string.
@@ -143,7 +206,7 @@ func (e *Engine) mergeData(name string, data map[string]any) map[string]any {
 		if data == nil {
 			return map[string]any{}
 		}
-		return data
+		return promoteSafeHTML(data)
 	}
 
 	e.mu.RLock()
@@ -157,11 +220,15 @@ func (e *Engine) mergeData(name string, data map[string]any) map[string]any {
 		merged[key] = value
 	}
 	e.applyComposers(name, merged)
-	return merged
+	return promoteSafeHTML(merged)
 }
 
 func (e *Engine) compileFast(name string) (*rt.Compiled, error) {
 	e.mu.RLock()
+	if e.preferHTML {
+		e.mu.RUnlock()
+		return nil, nil
+	}
 	if e.cacheOn {
 		if p, ok := e.fastCache[name]; ok {
 			e.mu.RUnlock()
@@ -179,11 +246,14 @@ func (e *Engine) compileFast(name string) (*rt.Compiled, error) {
 	if err != nil {
 		return nil, fmt.Errorf("canvas template [%s] (%s): %w", name, e.pathFor(name), err)
 	}
-	doc, err := ast.ParseSource(resolved)
+	if err := checkUnknownClosingDirectives(name, resolved, e.escapeMode); err != nil {
+		return nil, err
+	}
+	doc, err := ast.ParseSourceDepth(resolved, e.nestingLimit())
 	if err != nil {
 		return nil, fmt.Errorf("canvas template [%s] (%s): %w", name, e.pathFor(name), err)
 	}
-	prog, ok, err := rt.CompileFunc(doc, env)
+	prog, ok, err := rt.CompileFuncModeLang(doc, env, e.escapeMode, e.langEscapeCatalog)
 	if err != nil {
 		return nil, fmt.Errorf("canvas template [%s] (%s) rt compile: %w", name, e.pathFor(name), err)
 	}
@@ -222,11 +292,17 @@ func (e *Engine) compileHTML(name string) (*template.Template, error) {
 	if err != nil {
 		return nil, fmt.Errorf("canvas template [%s] (%s): %w", name, e.pathFor(name), err)
 	}
+	if err := checkUnknownClosingDirectives(name, resolved, e.escapeMode); err != nil {
+		return nil, err
+	}
 
 	parsed, err := e.compileView(resolved)
 	if err != nil {
 		return nil, fmt.Errorf("canvas template [%s] (%s) compile error: %w", name, e.pathFor(name), err)
 	}
+	// html/template strips HTML comments; rewrite delimiters so comment bodies
+	// (including escaped interpolations) survive into the output.
+	parsed = preserveHTMLCommentsForGoTemplate(parsed)
 	tmpl, err := template.New(name).Funcs(funcMap).Parse(parsed)
 	if err != nil {
 		return nil, fmt.Errorf("canvas template [%s] (%s) parse error: %w", name, e.pathFor(name), err)
@@ -241,30 +317,31 @@ func (e *Engine) compileHTML(name string) (*template.Template, error) {
 	return tmpl, nil
 }
 
-func (e *Engine) pathFor(name string) string {
-	name = strings.ReplaceAll(name, ".", string(os.PathSeparator))
-	if !strings.HasSuffix(name, e.extension) {
-		name += e.extension
-	}
-	return filepath.Join(e.directory, name)
-}
-
 // compileView converts Canvas directives into Go templates.
 func (e *Engine) compileView(input string) (string, error) {
+	maxNest := e.nestingLimit()
 	// Lex/AST front door: catch unclosed {{ / {!! / {{-- early with line info.
-	doc, err := ast.ParseSource(input)
+	doc, err := ast.ParseSourceDepth(input, maxNest)
 	if err != nil {
 		return "", err
 	}
-	if lowered, ok, lerr := ast.Lower(doc); lerr != nil {
-		return "", lerr
-	} else if ok {
-		return lowered, nil
+	e.mu.RLock()
+	preferHTML := e.preferHTML
+	e.mu.RUnlock()
+	// PreferHTMLPath must use the regex pipeline (EscapeStrict + canvasURL),
+	// matching the historical html-path probe that blocked AST Lower.
+	if !preferHTML {
+		if lowered, ok, lerr := ast.Lower(doc); lerr != nil {
+			return "", lerr
+		} else if ok {
+			return lowered, nil
+		}
 	}
 
 	out := input
 
-	// Preserve verbatim blocks from further compilation.
+	// Preserve verbatim blocks from further compilation (placeholder must not
+	// use "@@" — that sequence is the literal-@ escape).
 	verbatim := map[string]string{}
 	vi := 0
 	out = reVerbatim.ReplaceAllStringFunc(out, func(m string) string {
@@ -272,11 +349,15 @@ func (e *Engine) compileView(input string) (string, error) {
 		if len(match) != 2 {
 			return m
 		}
-		key := fmt.Sprintf("@@VERBATIM_%d@@", vi)
+		key := fmt.Sprintf("__CANVAS_VERBATIM_%d__", vi)
 		vi++
 		verbatim[key] = match[1]
 		return key
 	})
+
+	// @@ → literal @; protect before directive regexes run.
+	const atEsc = "\x00CANVAS_AT\x00"
+	out = strings.ReplaceAll(out, "@@", atEsc)
 
 	// Custom directives (after verbatim, before built-in compilation).
 	out = e.applyCustomDirectives(out)
@@ -288,6 +369,7 @@ func (e *Engine) compileView(input string) (string, error) {
 	out = reSectionShortVar.ReplaceAllString(out, "")
 	out = reSectionShow.ReplaceAllString(out, "")
 	out = reYieldDefault.ReplaceAllString(out, "")
+	out = reYieldDefaultVar.ReplaceAllString(out, "")
 	out = reYield.ReplaceAllString(out, "")
 	out = reInclude.ReplaceAllString(out, "")
 	out = reIncludeIf.ReplaceAllString(out, "")
@@ -306,9 +388,6 @@ func (e *Engine) compileView(input string) (string, error) {
 	out = reProps.ReplaceAllString(out, "")
 	out = reAware.ReplaceAllString(out, "")
 
-	// @php blocks are not executed; strip to a safe HTML comment.
-	out = compilePhpDirectives(out)
-
 	// Comments
 	out = replaceAllRegex(out, `\{\{--.*?--\}\}`, "")
 
@@ -321,10 +400,33 @@ func (e *Engine) compileView(input string) (string, error) {
 	out = replaceAllRegex(out, `\{!!\s*\$attributes\s*!!\}`, "{{ attributesHTML (dataGet . `attributes`) }}")
 
 	// Escape-aware output: simple $path, ternary, ??, function calls, indexing.
-	out = compileEchoExpressions(out)
+	// Shadow scan expands verbatim placeholders to raw bodies (output context).
+	var echoErr error
+	out, echoErr = compileEchoExpressions(out, e.escapeMode, verbatim)
+	if echoErr != nil {
+		return "", echoErr
+	}
 
-	// @json($var.path)
-	out = replaceAllRegex(out, `@json\s*\(\s*\$([a-zA-Z0-9_.]+)\s*\)`, "{{ json (dataGet . `$1`) }}")
+	// @json / @js with contextual escaping
+	var jerr error
+	out, jerr = compileJSONDirectives(out, e.escapeMode, verbatim)
+	if jerr != nil {
+		return "", jerr
+	}
+
+	// @attrs($map) — only between attributes inside a tag
+	var aerr error
+	out, aerr = compileAttrsDirectives(out, e.escapeMode, verbatim)
+	if aerr != nil {
+		return "", aerr
+	}
+
+	// @lang — contextual (trusted catalog in text; attr escape; Strict forbid in script/style/tag)
+	var lerr error
+	out, lerr = compileLangDirectives(out, e.escapeMode, e.langEscapeCatalog, verbatim)
+	if lerr != nil {
+		return "", lerr
+	}
 
 	// @class / @style from map or slice vars
 	out = replaceAllRegex(out, `@class\s*\(\s*\$([a-zA-Z0-9_.]+)\s*\)`, "{{ classAttr (dataGet . `$1`) }}")
@@ -338,11 +440,6 @@ func (e *Engine) compileView(input string) (string, error) {
 		out = replaceAllRegex(out, `@`+attr+`\s*\(\s*\$([a-zA-Z0-9_.]+)\s*\)`, "{{ attrBool (dataGet . `$1`) `"+attr+"` }}")
 	}
 
-	// @lang with replacements before bare @lang (prefix).
-	// Locale always from Execute root (`$`): inside @foreach `.` is the item and has no locale.
-	out = replaceAllRegex(out, `@lang\s*\(\s*['"]([^'"]+)['"]\s*,\s*\[\s*['"]([^'"]+)['"]\s*=>\s*['"]([^'"]*)['"]\s*\]\s*\)`, "{{ trans (dataGet $ `locale`) `$1` (dict `$2` `$3`) }}")
-	out = replaceAllRegex(out, `@lang\s*\(\s*['"]([^'"]+)['"]\s*,\s*\[\s*['"]([^'"]+)['"]\s*=>\s*\$([a-zA-Z0-9_.]+)\s*\]\s*\)`, "{{ trans (dataGet $ `locale`) `$1` (dict `$2` (dataGet . `$3`)) }}")
-	out = replaceAllRegex(out, `@lang\s*\(\s*['"]([^'"]+)['"]\s*\)`, "{{ trans (dataGet $ `locale`) `$1` }}")
 	// @choice('key', $count)
 	out = replaceAllRegex(out, `@choice\s*\(\s*['"]([^'"]+)['"]\s*,\s*\$([a-zA-Z0-9_.]+)\s*\)`, "{{ choice `$1` (dataGet . `$2`) }}")
 	// @choice('key', 3)
@@ -374,6 +471,8 @@ func (e *Engine) compileView(input string) (string, error) {
 
 	out = compileCanDirectives(out)
 	out = compileEnvDirectives(out)
+
+	out = strings.ReplaceAll(out, atEsc, "@")
 
 	for key, body := range verbatim {
 		out = strings.ReplaceAll(out, key, escapeVerbatim(body))
@@ -709,6 +808,32 @@ func escapeVerbatim(body string) string {
 	return body
 }
 
+// preserveHTMLCommentsForGoTemplate rewrites <!-- ... --> so html/template
+// does not strip them (stdlib discards HTML comments at parse time).
+func preserveHTMLCommentsForGoTemplate(s string) string {
+	var b strings.Builder
+	b.Grow(len(s) + 32)
+	i := 0
+	for i < len(s) {
+		if !strings.HasPrefix(s[i:], "<!--") {
+			b.WriteByte(s[i])
+			i++
+			continue
+		}
+		endRel := strings.Index(s[i+4:], "-->")
+		if endRel < 0 {
+			b.WriteString(s[i:])
+			break
+		}
+		inner := s[i+4 : i+4+endRel]
+		b.WriteString(`{{safe "<!--"}}`)
+		b.WriteString(inner)
+		b.WriteString(`{{safe "-->"}}`)
+		i = i + 4 + endRel + 3
+	}
+	return b.String()
+}
+
 func replaceAllRegex(input, pattern, repl string) string {
 	re := mustCompile(pattern)
 	return re.ReplaceAllString(input, repl)
@@ -810,9 +935,45 @@ func defaultFuncs() template.FuncMap {
 		"safe": func(s string) template.HTML {
 			return template.HTML(s)
 		},
-		"safeStr":        safeStr,
-		"dataGet":        dataGet,
-		"json":           toJSON,
+		"safeStr": safeStr,
+		"dataGet": dataGet,
+		"json":    toJSON,
+		"canvasURL": func(v any) template.HTML {
+			return template.HTML(rt.EscapeURLAttr(fmt.Sprint(v), true))
+		},
+		"canvasURLBlock": func(v any) template.HTML {
+			return template.HTML("#unsafe")
+		},
+		"canvasUnquoted": func(v any) template.HTML {
+			return template.HTML(rt.EscapeUnquotedAttr(fmt.Sprint(v)))
+		},
+		"canvasCSS": func(v any) template.HTML {
+			return template.HTML(rt.EscapeCSSValue(fmt.Sprint(v)))
+		},
+		"canvasURLUnquoted": func(v any) template.HTML {
+			s := rt.EscapeURLAttr(fmt.Sprint(v), true)
+			if s != "#unsafe" {
+				s = rt.EscapeUnquotedAttr(s)
+			}
+			return template.HTML(s)
+		},
+		"canvasJSON": func(v any) template.JS {
+			b, err := json.Marshal(v)
+			if err != nil {
+				return "null"
+			}
+			return template.JS(b)
+		},
+		"canvasJSONAttr": func(v any) template.HTML {
+			b, err := json.Marshal(v)
+			if err != nil {
+				return "null"
+			}
+			return template.HTML(template.HTMLEscapeString(string(b)))
+		},
+		"canvasAttrs": func(v any) template.HTMLAttr {
+			return template.HTMLAttr(rt.FormatAttrs(v))
+		},
 		"cmpGt":          cmpGt,
 		"cmpGe":          cmpGe,
 		"cmpLt":          cmpLt,
@@ -955,6 +1116,23 @@ func defaultFuncs() template.FuncMap {
 			// locale, key [, replace map]
 			return fmt.Sprint(args[1])
 		},
+		"canvasTrans": func(data map[string]any, key string, repl ...any) string {
+			msg := key
+			if data != nil {
+				if m, ok := data["__trans"].(map[string]string); ok {
+					if v, ok := m[key]; ok {
+						msg = v
+					}
+				}
+			}
+			var replMap map[string]any
+			if len(repl) > 0 {
+				if m, ok := repl[0].(map[string]any); ok {
+					replMap = m
+				}
+			}
+			return rt.FormatLang(msg, replMap)
+		},
 		"can": func(data map[string]any, ability string, args ...any) bool {
 			if data == nil {
 				return false
@@ -1058,4 +1236,169 @@ func isEmptyValue(v any) bool {
 		return rv.IsNil()
 	}
 	return false
+}
+
+var reJSONDir = regexp.MustCompile(`@(json|js)\s*\(\s*\$([a-zA-Z0-9_.]+)\s*\)`)
+
+// Locale always from Execute root (`$`): inside @foreach `.` is the item and has no locale.
+var (
+	reLangReplLit = regexp.MustCompile(`@lang\s*\(\s*['"]([^'"]+)['"]\s*,\s*\[\s*['"]([^'"]+)['"]\s*=>\s*['"]([^'"]*)['"]\s*\]\s*\)`)
+	reLangReplVar = regexp.MustCompile(`@lang\s*\(\s*['"]([^'"]+)['"]\s*,\s*\[\s*['"]([^'"]+)['"]\s*=>\s*\$([a-zA-Z0-9_.]+)\s*\]\s*\)`)
+	reLangBare    = regexp.MustCompile(`@lang\s*\(\s*['"]([^'"]+)['"]\s*\)`)
+)
+
+func compileLangDirectives(out string, mode rt.EscapeMode, escapeCatalog bool, verbatim map[string]string) (string, error) {
+	expand := func(s string) string {
+		for k, v := range verbatim {
+			s = strings.ReplaceAll(s, k, v)
+		}
+		return s
+	}
+	type hit struct {
+		start, end int
+		call       string // canvasTrans … args without braces
+	}
+	var hits []hit
+	add := func(re *regexp.Regexp, build func([]string) string) {
+		for _, m := range re.FindAllStringSubmatchIndex(out, -1) {
+			subs := make([]string, (len(m)/2)-1)
+			for i := 1; i < len(m)/2; i++ {
+				if m[2*i] >= 0 {
+					subs[i-1] = out[m[2*i]:m[2*i+1]]
+				}
+			}
+			hits = append(hits, hit{start: m[0], end: m[1], call: build(subs)})
+		}
+	}
+	add(reLangReplLit, func(s []string) string {
+		return fmt.Sprintf("canvasTrans $ `%s` (dict `%s` `%s`)", s[0], s[1], s[2])
+	})
+	add(reLangReplVar, func(s []string) string {
+		return fmt.Sprintf("canvasTrans $ `%s` (dict `%s` (dataGet . `%s`))", s[0], s[1], s[2])
+	})
+	add(reLangBare, func(s []string) string {
+		return fmt.Sprintf("canvasTrans $ `%s`", s[0])
+	})
+	if len(hits) == 0 {
+		return out, nil
+	}
+	sort.Slice(hits, func(i, j int) bool { return hits[i].start < hits[j].start })
+	var b strings.Builder
+	last := 0
+	for _, h := range hits {
+		if h.start < last {
+			continue // overlapping (shouldn't)
+		}
+		b.WriteString(out[last:h.start])
+		kind, ctx := rt.ScanEscapeDetail(expand(out[:h.start]), false, mode)
+		if kind == rt.EscForbid {
+			line, col := rt.LineCol(out, h.start)
+			return "", rt.FormatForbidError("", line, col, ctx)
+		}
+		switch kind {
+		case rt.EscURLAttr:
+			b.WriteString("{{ canvasURL (")
+			b.WriteString(h.call)
+			b.WriteString(") }}")
+		case rt.EscURLBlock:
+			b.WriteString("{{ canvasURLBlock (")
+			b.WriteString(h.call)
+			b.WriteString(") }}")
+		case rt.EscUnquoted:
+			b.WriteString("{{ canvasUnquoted (")
+			b.WriteString(h.call)
+			b.WriteString(") }}")
+		case rt.EscCSS:
+			b.WriteString("{{ canvasCSS (")
+			b.WriteString(h.call)
+			b.WriteString(") }}")
+		case rt.EscURLUnquoted:
+			b.WriteString("{{ canvasURLUnquoted (")
+			b.WriteString(h.call)
+			b.WriteString(") }}")
+		default:
+			if rt.LangTrustedText(ctx, escapeCatalog) {
+				b.WriteString("{{ safeStr (")
+				b.WriteString(h.call)
+				b.WriteString(") }}")
+			} else {
+				b.WriteString("{{ ")
+				b.WriteString(h.call)
+				b.WriteString(" }}")
+			}
+		}
+		last = h.end
+	}
+	b.WriteString(out[last:])
+	return b.String(), nil
+}
+
+func compileJSONDirectives(out string, mode rt.EscapeMode, verbatim map[string]string) (string, error) {
+	expand := func(s string) string {
+		for k, v := range verbatim {
+			s = strings.ReplaceAll(s, k, v)
+		}
+		return s
+	}
+	var b strings.Builder
+	last := 0
+	for _, loc := range reJSONDir.FindAllStringSubmatchIndex(out, -1) {
+		b.WriteString(out[last:loc[0]])
+		name := out[loc[2]:loc[3]]
+		path := out[loc[4]:loc[5]]
+		kind, ctx := rt.ScanEscapeDetail(expand(out[:loc[0]]), true, mode)
+		if name == "js" && kind == rt.EscHTML {
+			kind = rt.EscJSON
+		}
+		if kind == rt.EscForbid {
+			line, col := rt.LineCol(out, loc[0])
+			return "", rt.FormatForbidError("", line, col, ctx)
+		}
+		fn := "canvasJSON"
+		if kind == rt.EscJSONAttr {
+			fn = "canvasJSONAttr"
+		}
+		b.WriteString("{{ ")
+		b.WriteString(fn)
+		b.WriteString(" (dataGet . `")
+		b.WriteString(path)
+		b.WriteString("`) }}")
+		last = loc[1]
+	}
+	b.WriteString(out[last:])
+	return b.String(), nil
+}
+
+var reAttrsDir = regexp.MustCompile(`@attrs\s*\(\s*\$([a-zA-Z0-9_.]+)\s*\)`)
+
+func compileAttrsDirectives(out string, mode rt.EscapeMode, verbatim map[string]string) (string, error) {
+	if mode == rt.EscapeLegacy {
+		// Legacy: still compile, but without position checks beyond html/template.
+	}
+	expand := func(s string) string {
+		for k, v := range verbatim {
+			s = strings.ReplaceAll(s, k, v)
+		}
+		return s
+	}
+	var b strings.Builder
+	last := 0
+	for _, loc := range reAttrsDir.FindAllStringSubmatchIndex(out, -1) {
+		b.WriteString(out[last:loc[0]])
+		path := out[loc[2]:loc[3]]
+		prefix := expand(out[:loc[0]])
+		if mode == rt.EscapeStrict {
+			ok, ctx := rt.AttrsPositionOK(prefix)
+			if !ok {
+				line, col := rt.LineCol(out, loc[0])
+				return "", rt.FormatForbidError("", line, col, ctx)
+			}
+		}
+		b.WriteString("{{ canvasAttrs (dataGet . `")
+		b.WriteString(path)
+		b.WriteString("`) }}")
+		last = loc[1]
+	}
+	b.WriteString(out[last:])
+	return b.String(), nil
 }
