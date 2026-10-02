@@ -1372,7 +1372,6 @@ func compileJSONDirectives(out string, mode rt.EscapeMode, verbatim map[string]s
 var reAttrsDir = regexp.MustCompile(`@attrs\s*\(\s*\$([a-zA-Z0-9_.]+)\s*\)`)
 
 func compileAttrsDirectives(out string, mode rt.EscapeMode, verbatim map[string]string) (string, error) {
-	_ = mode // Legacy still compiles; Strict adds position checks below.
 	expand := func(s string) string {
 		for k, v := range verbatim {
 			s = strings.ReplaceAll(s, k, v)
