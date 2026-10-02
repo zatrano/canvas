@@ -14,6 +14,11 @@ import (
 	"github.com/zatrano/canvas/lex"
 )
 
+// CondExprLower, when set by the canvas package, compiles richer @if / echo
+// expressions (count, ternary, in_array, index, …) that the leaf AST subset
+// does not lower natively. Returns ok=false to keep the regex pipeline.
+var CondExprLower func(expr string, aliases map[string]bool) (lowered string, ok bool)
+
 // Node is one Canvas AST node.
 type Node interface {
 	node()
@@ -142,15 +147,22 @@ func echoOK(expr string, aliases map[string]bool) bool {
 		return false
 	}
 	expr = strings.TrimSpace(expr)
-	if !strings.HasPrefix(expr, "$") {
-		return false
+	if strings.HasPrefix(expr, "$") {
+		path := strings.TrimPrefix(expr, "$")
+		head, _, _ := strings.Cut(path, ".")
+		if aliases[head] {
+			if identOK(path) {
+				return true
+			}
+		} else if simpleDollarPath(expr) {
+			return true
+		}
 	}
-	path := strings.TrimPrefix(expr, "$")
-	head, _, _ := strings.Cut(path, ".")
-	if aliases[head] {
-		return identOK(path)
+	if CondExprLower != nil {
+		_, ok := CondExprLower(expr, aliases)
+		return ok
 	}
-	return simpleDollarPath(expr)
+	return false
 }
 
 func identOK(path string) bool {
@@ -457,15 +469,20 @@ func condOK(args string) bool {
 		case "empty", "isset":
 			return simpleDollarPath(inner)
 		default:
-			// count() and richer calls stay on the regex / if_expr path.
-			return false
+			// count / in_array / … → CondExprLower below
 		}
 	}
 	if simpleDollarPath(args) {
 		return true
 	}
-	_, _, _, ok := ParseSimpleCompare(args)
-	return ok
+	if _, _, _, ok := ParseSimpleCompare(args); ok {
+		return true
+	}
+	if CondExprLower != nil {
+		_, ok := CondExprLower(args, nil)
+		return ok
+	}
+	return false
 }
 
 // parseCondCall parses name($inner) with balanced parens; inner must be the only arg.
@@ -737,11 +754,11 @@ func lowerNodes(b *strings.Builder, nodes []Node, aliases map[string]bool) bool 
 			// stripped
 		case Echo:
 			b.WriteString("{{ ")
-			b.WriteString(lowerExprIn(x.Expr, aliases))
+			b.WriteString(lowerEchoExpr(x.Expr, aliases))
 			b.WriteString(" }}")
 		case RawEcho:
 			b.WriteString("{{ safeStr (")
-			b.WriteString(lowerExprIn(x.Expr, aliases))
+			b.WriteString(lowerEchoExpr(x.Expr, aliases))
 			b.WriteString(") }}")
 		case Directive:
 			if !lowerDirective(b, x, aliases) {
@@ -1081,7 +1098,14 @@ func lowerDirective(b *strings.Builder, x Directive, aliases map[string]bool) bo
 }
 
 func lowerCond(args string, aliases map[string]bool) string {
-	args = unwrapParens(strings.TrimSpace(args))
+	args = strings.TrimSpace(args)
+	// Prefer the full if_expr bridge (count/ternary/in_array/index) when registered.
+	if CondExprLower != nil {
+		if s, ok := CondExprLower(args, aliases); ok {
+			return s
+		}
+	}
+	args = unwrapParens(args)
 	if strings.HasPrefix(args, "!") {
 		return "(not (" + lowerCond(strings.TrimSpace(args[1:]), aliases) + "))"
 	}
@@ -1148,6 +1172,16 @@ func lowerCond(args string, aliases map[string]bool) string {
 		}
 	}
 	return lowerExprIn(args, aliases)
+}
+
+func lowerEchoExpr(expr string, aliases map[string]bool) string {
+	expr = strings.TrimSpace(expr)
+	if CondExprLower != nil {
+		if s, ok := CondExprLower(expr, aliases); ok {
+			return s
+		}
+	}
+	return lowerExprIn(expr, aliases)
 }
 
 func lowerExprIn(expr string, aliases map[string]bool) string {

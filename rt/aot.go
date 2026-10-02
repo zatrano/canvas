@@ -1,12 +1,21 @@
 package rt
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 
 	"github.com/zatrano/canvas/ast"
 )
+
+// errAOTMiss means the document is AST-lowerable for html/template but not for
+// the native AOT path (rich if_expr / echoes). Callers treat it as ok=false.
+var errAOTMiss = errors.New("canvas aot: miss")
+
+func isAOTMiss(err error) bool {
+	return err != nil && errors.Is(err, errAOTMiss)
+}
 
 // RenderFunc is a fully specialized template — no opcode dispatch, no Ctx alloc.
 type RenderFunc func(w *Writer, root map[string]any)
@@ -56,6 +65,9 @@ func CompileFuncModeLang(doc *ast.Document, env string, mode EscapeMode, escapeC
 		return nil, false, nil
 	}
 	fn, hint, err := buildFunc(doc.Nodes, env, mode, escapeCatalog)
+	if isAOTMiss(err) {
+		return nil, false, nil
+	}
 	if err != nil {
 		return nil, false, err
 	}
@@ -110,6 +122,9 @@ func buildNodeMode(n ast.Node, env string, mode EscapeMode, escapeCatalog bool, 
 			return nil, 0, FormatForbidError("", 0, 0, ctx)
 		}
 		path := SplitPath(x.Expr)
+		if len(path) == 0 || !astSimpleEcho(x.Expr) {
+			return nil, 0, errAOTMiss
+		}
 		prefix.WriteString(InterpMarker)
 		k := kind
 		return func(w *Writer, root map[string]any) {
@@ -117,6 +132,9 @@ func buildNodeMode(n ast.Node, env string, mode EscapeMode, escapeCatalog bool, 
 		}, 16, nil
 	case ast.RawEcho:
 		path := SplitPath(x.Expr)
+		if len(path) == 0 || !astSimpleEcho(x.Expr) {
+			return nil, 0, errAOTMiss
+		}
 		prefix.WriteString(InterpMarker)
 		return func(w *Writer, root map[string]any) {
 			writeRaw(w, wLookup(w, root, path))
@@ -740,11 +758,31 @@ func runAnySliceW(w *Writer, root map[string]any, keyAlias, valAlias string, ite
 	w.aliases = prev
 }
 
+func astSimpleEcho(expr string) bool {
+	expr = strings.TrimSpace(expr)
+	if !strings.HasPrefix(expr, "$") {
+		return false
+	}
+	if strings.ContainsAny(expr, "?[]()+-*/%<>=!&|,") {
+		return false
+	}
+	path := strings.TrimPrefix(expr, "$")
+	if path == "" {
+		return false
+	}
+	for _, r := range path {
+		if !(r == '_' || r == '.' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+			return false
+		}
+	}
+	return true
+}
+
 func buildIfAOT(b ast.Block, env string, mode EscapeMode, escapeCatalog bool, positive bool) (RenderFunc, int, error) {
 	segs := splitElseIf(b.Body)
 	cond, ok := ParseCond(b.Args)
 	if !ok {
-		return nil, 0, fmt.Errorf("canvas aot: bad if cond %q", b.Args)
+		return nil, 0, errAOTMiss
 	}
 	thenFn, th, err := buildFunc(segs[0].body, env, mode, escapeCatalog)
 	if err != nil {

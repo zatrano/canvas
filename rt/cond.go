@@ -116,7 +116,8 @@ func ParseCond(args string) (Cond, bool) {
 	if len(p) == 0 {
 		return Cond{}, false
 	}
-	if strings.ContainsAny(args, "<>!=&|") {
+	// Reject rich if_expr forms so AOT misses and html/template + CondExprLower runs.
+	if strings.ContainsAny(args, "<>!=&|()[],?'\"") {
 		return Cond{}, false
 	}
 	return Cond{Truthy: p}, true

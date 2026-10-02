@@ -187,13 +187,14 @@ func TestIfParenNotEmptyLowers(t *testing.T) {
 			}
 		}
 	}
-	// Richer calls remain regex.
+	// Richer calls use CondExprLower (canvas if_expr bridge).
 	rich, err := ast.ParseSource(`@if(count($items) > 0)x@endif`)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Without canvas init CondExprLower is nil in ast tests.
 	if rich.CanASTLower() {
-		t.Fatal("count() compare must not CanASTLower yet")
+		t.Fatal("ast-only: count() must not CanASTLower without CondExprLower")
 	}
 }
 

@@ -17,6 +17,9 @@ func Compile(doc *ast.Document, env string) (p *Program, ok bool, err error) {
 	}
 	c := &compiler{env: env}
 	if err := c.emitNodes(doc.Nodes); err != nil {
+		if isAOTMiss(err) {
+			return nil, false, nil
+		}
 		return nil, false, err
 	}
 	return &Program{Ops: c.ops, Statics: c.statics, Env: env}, true, nil
@@ -173,10 +176,10 @@ func (c *compiler) emitRange(coll, key, alias string, body []ast.Node) error {
 func (c *compiler) emitIf(b ast.Block, kind OpKind) error {
 	cond, ok := ParseCond(b.Args)
 	if !ok {
-		return fmt.Errorf("canvas rt: bad if cond %q", b.Args)
+		return errAOTMiss
 	}
 	if cond.Op != "" {
-		return fmt.Errorf("canvas rt: compare @if requires AOT path")
+		return errAOTMiss
 	}
 	return c.emitCond(kind, cond.Truthy, "", b.Body)
 }
