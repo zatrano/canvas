@@ -28,44 +28,43 @@ func checkUnknownClosingDirectives(tmplName, src string, mode rt.EscapeMode) err
 		return nil
 	}
 	toks, lexErr := lex.Lex(src)
-	if lexErr != nil {
-		// Lex errors are reported by the normal parse path.
-		return nil
-	}
-	verbatimDepth := 0
-	for _, tok := range toks {
-		if tok.Kind != lex.KindDirective {
-			continue
-		}
-		lower := strings.ToLower(tok.Name)
-		switch lower {
-		case "verbatim":
-			verbatimDepth++
-			continue
-		case "endverbatim":
-			if verbatimDepth > 0 {
-				verbatimDepth--
+	if lexErr == nil {
+		verbatimDepth := 0
+		for _, tok := range toks {
+			if tok.Kind != lex.KindDirective {
+				continue
 			}
-			continue
+			lower := strings.ToLower(tok.Name)
+			switch lower {
+			case "verbatim":
+				verbatimDepth++
+				continue
+			case "endverbatim":
+				if verbatimDepth > 0 {
+					verbatimDepth--
+				}
+				continue
+			}
+			if verbatimDepth > 0 {
+				continue
+			}
+			if !strings.HasPrefix(lower, "end") || len(lower) <= 3 {
+				continue
+			}
+			if !lettersOnly(tok.Name[3:]) {
+				continue
+			}
+			if _, ok := knownClosingDirectives[lower]; ok {
+				continue
+			}
+			if !endDirectiveBoundary(src, tok.Offset) {
+				continue
+			}
+			return fmt.Errorf("canvas template [%s] at %d:%d: unknown closing directive @%s; see docs/directives.md",
+				tmplName, tok.Line, tok.Column, lower)
 		}
-		if verbatimDepth > 0 {
-			continue
-		}
-		if !strings.HasPrefix(lower, "end") || len(lower) <= 3 {
-			continue
-		}
-		if !lettersOnly(tok.Name[3:]) {
-			continue
-		}
-		if _, ok := knownClosingDirectives[lower]; ok {
-			continue
-		}
-		if !endDirectiveBoundary(src, tok.Offset) {
-			continue
-		}
-		return fmt.Errorf("canvas template [%s] at %d:%d: unknown closing directive @%s; see docs/directives.md",
-			tmplName, tok.Line, tok.Column, lower)
 	}
+	// Lex failures are left to the normal parse path.
 	return nil
 }
 
