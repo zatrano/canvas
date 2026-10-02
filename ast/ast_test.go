@@ -112,8 +112,32 @@ func TestIfComparisonFallsBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if doc.CanASTLower() {
-		t.Fatal("comparisons must use regex/if_expr pipeline")
+	if !doc.CanASTLower() {
+		t.Fatal("simple comparisons must AST-lower")
+	}
+	out, ok, err := ast.Lower(doc)
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if !strings.Contains(out, "cmpGt") {
+		t.Fatalf("want cmpGt in %q", out)
+	}
+}
+
+func TestForelseKeyAliasLowers(t *testing.T) {
+	doc, err := ast.ParseSource(`@forelse($items as $k => $v){{ $k }}:{{ $v }}@empty none@endforelse`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !doc.CanASTLower() {
+		t.Fatal("forelse key=>alias must AST-lower")
+	}
+	out, ok, err := ast.Lower(doc)
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if !strings.Contains(out, "range $k, $v") {
+		t.Fatalf("want keyed range in %q", out)
 	}
 }
 

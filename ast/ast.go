@@ -180,8 +180,8 @@ func blockOK(b Block, aliases map[string]bool) bool {
 		return canLowerNodes(b.Body, child)
 	case "forelse":
 		coll, key, alias, ok := parseForeachArgs(b.Args)
-		if !ok || !simpleDollarPath("$"+coll) || key != "" {
-			return false // key=>alias forelse stays on regex for now
+		if !ok || !simpleDollarPath("$"+coll) {
+			return false
 		}
 		main, emptyBody, ok := splitForelseBody(b.Body)
 		if !ok {
@@ -189,8 +189,16 @@ func blockOK(b Block, aliases map[string]bool) bool {
 		}
 		child := copyAliases(aliases)
 		child[alias] = true
+		if key != "" {
+			child[key] = true
+		}
 		return canLowerNodes(main, child) && canLowerNodes(emptyBody, aliases)
-	case "if", "unless", "isset", "empty":
+	case "if", "unless":
+		if !condOK(strings.TrimSpace(b.Args)) {
+			return false
+		}
+		return canLowerNodes(b.Body, aliases)
+	case "isset", "empty":
 		if !simpleDollarPath(strings.TrimSpace(b.Args)) {
 			return false
 		}
@@ -322,9 +330,10 @@ func leafDirectiveOK(x Directive) bool {
 		_, ok := unquote(strings.TrimSpace(x.Args))
 		return ok
 	case "json", "js", "class", "style",
-		"elseif",
 		"checked", "selected", "disabled", "readonly", "required":
 		return simpleDollarPath(strings.TrimSpace(x.Args))
+	case "elseif":
+		return condOK(strings.TrimSpace(x.Args))
 	case "lang":
 		args := strings.TrimSpace(x.Args)
 		if strings.Contains(args, ",") {
@@ -373,6 +382,45 @@ func choiceArgsOK(args string) bool {
 	return err == nil
 }
 
+// ParseSimpleCompare parses `$path OP lit|$path` where OP is one of
+// >= <= == != > <. Used by AST CanASTLower/Lower and rt AOT.
+func ParseSimpleCompare(expr string) (left, op, right string, ok bool) {
+	expr = strings.TrimSpace(expr)
+	for _, cand := range []string{">=", "<=", "==", "!=", ">", "<"} {
+		i := strings.Index(expr, cand)
+		if i < 0 {
+			continue
+		}
+		left = strings.TrimSpace(expr[:i])
+		right = strings.TrimSpace(expr[i+len(cand):])
+		if !simpleDollarPath(left) {
+			continue
+		}
+		if simpleDollarPath(right) {
+			return left, cand, right, true
+		}
+		if _, err := strconv.ParseInt(right, 10, 64); err == nil {
+			return left, cand, right, true
+		}
+		if _, err := strconv.ParseFloat(right, 64); err == nil {
+			return left, cand, right, true
+		}
+		if _, uok := unquote(right); uok {
+			return left, cand, right, true
+		}
+	}
+	return "", "", "", false
+}
+
+func condOK(args string) bool {
+	args = strings.TrimSpace(args)
+	if simpleDollarPath(args) {
+		return true
+	}
+	_, _, _, ok := ParseSimpleCompare(args)
+	return ok
+}
+
 func simpleDollarPath(expr string) bool {
 	expr = strings.TrimSpace(expr)
 	if !strings.HasPrefix(expr, "$") {
@@ -393,6 +441,11 @@ func simpleDollarPath(expr string) bool {
 func isAttributesExpr(expr string) bool {
 	expr = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(expr), "$"))
 	return expr == "attributes" || strings.HasPrefix(expr, "attributes.")
+}
+
+// Unquote strips a single- or double-quoted string literal.
+func Unquote(s string) (string, bool) {
+	return unquote(s)
 }
 
 func unquote(s string) (string, bool) {
@@ -532,7 +585,7 @@ func lowerBlock(b *strings.Builder, blk Block, aliases map[string]bool) bool {
 		b.WriteString("{{ end }}")
 		return true
 	case "forelse":
-		coll, _, alias, ok := parseForeachArgs(blk.Args)
+		coll, key, alias, ok := parseForeachArgs(blk.Args)
 		if !ok {
 			return false
 		}
@@ -542,14 +595,28 @@ func lowerBlock(b *strings.Builder, blk Block, aliases map[string]bool) bool {
 		}
 		child := copyAliases(aliases)
 		child[alias] = true
+		if key != "" {
+			child[key] = true
+		}
 		collExpr := foreachCollExpr(coll, aliases)
 		b.WriteString("{{ if not (empty (")
 		b.WriteString(collExpr)
-		b.WriteString(")) }}{{ range $__zfi, $")
-		b.WriteString(alias)
-		b.WriteString(" := ")
-		b.WriteString(collExpr)
-		b.WriteString(" }}")
+		b.WriteString(")) }}")
+		if key != "" {
+			b.WriteString("{{ range $")
+			b.WriteString(key)
+			b.WriteString(", $")
+			b.WriteString(alias)
+			b.WriteString(" := ")
+			b.WriteString(collExpr)
+			b.WriteString(" }}")
+		} else {
+			b.WriteString("{{ range $__zfi, $")
+			b.WriteString(alias)
+			b.WriteString(" := ")
+			b.WriteString(collExpr)
+			b.WriteString(" }}")
+		}
 		if !lowerNodes(b, main, child) {
 			return false
 		}
@@ -561,7 +628,7 @@ func lowerBlock(b *strings.Builder, blk Block, aliases map[string]bool) bool {
 		return true
 	case "if":
 		b.WriteString("{{ if ")
-		b.WriteString(lowerExprIn(strings.TrimSpace(blk.Args), aliases))
+		b.WriteString(lowerCond(strings.TrimSpace(blk.Args), aliases))
 		b.WriteString(" }}")
 		if !lowerNodes(b, blk.Body, aliases) {
 			return false
@@ -570,7 +637,7 @@ func lowerBlock(b *strings.Builder, blk Block, aliases map[string]bool) bool {
 		return true
 	case "unless":
 		b.WriteString("{{ if not (")
-		b.WriteString(lowerExprIn(strings.TrimSpace(blk.Args), aliases))
+		b.WriteString(lowerCond(strings.TrimSpace(blk.Args), aliases))
 		b.WriteString(") }}")
 		if !lowerNodes(b, blk.Body, aliases) {
 			return false
@@ -784,7 +851,7 @@ func lowerDirective(b *strings.Builder, x Directive, aliases map[string]bool) bo
 		b.WriteString(" }}")
 	case "elseif":
 		b.WriteString("{{ else if ")
-		b.WriteString(lowerExprIn(strings.TrimSpace(x.Args), aliases))
+		b.WriteString(lowerCond(strings.TrimSpace(x.Args), aliases))
 		b.WriteString(" }}")
 	case "else":
 		b.WriteString("{{ else }}")
@@ -792,6 +859,34 @@ func lowerDirective(b *strings.Builder, x Directive, aliases map[string]bool) bo
 		return false
 	}
 	return true
+}
+
+func lowerCond(args string, aliases map[string]bool) string {
+	args = strings.TrimSpace(args)
+	if left, op, right, ok := ParseSimpleCompare(args); ok {
+		lf := lowerExprIn(left, aliases)
+		rf := right
+		if simpleDollarPath(right) {
+			rf = lowerExprIn(right, aliases)
+		} else if q, uok := unquote(right); uok {
+			rf = "`" + strings.ReplaceAll(q, "`", "") + "`"
+		}
+		switch op {
+		case "==":
+			return fmt.Sprintf("(eq (printf `%%v` %s) (printf `%%v` %s))", lf, rf)
+		case "!=":
+			return fmt.Sprintf("(ne (printf `%%v` %s) (printf `%%v` %s))", lf, rf)
+		case ">":
+			return "(cmpGt " + lf + " " + rf + ")"
+		case ">=":
+			return "(cmpGe " + lf + " " + rf + ")"
+		case "<":
+			return "(cmpLt " + lf + " " + rf + ")"
+		case "<=":
+			return "(cmpLe " + lf + " " + rf + ")"
+		}
+	}
+	return lowerExprIn(args, aliases)
 }
 
 func lowerExprIn(expr string, aliases map[string]bool) string {

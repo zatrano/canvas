@@ -732,7 +732,10 @@ func runAnySliceW(w *Writer, root map[string]any, keyAlias, valAlias string, ite
 
 func buildIfAOT(b ast.Block, env string, mode EscapeMode, escapeCatalog bool, positive bool) (RenderFunc, int, error) {
 	segs := splitElseIf(b.Body)
-	path := SplitPath(b.Args)
+	cond, ok := ParseCond(b.Args)
+	if !ok {
+		return nil, 0, fmt.Errorf("canvas aot: bad if cond %q", b.Args)
+	}
 	thenFn, th, err := buildFunc(segs[0].body, env, mode, escapeCatalog)
 	if err != nil {
 		return nil, 0, err
@@ -746,7 +749,7 @@ func buildIfAOT(b ast.Block, env string, mode EscapeMode, escapeCatalog bool, po
 		}
 	}
 	return func(w *Writer, root map[string]any) {
-		ok := truthy(wLookup(w, root, path))
+		ok := EvalCond(w, root, cond)
 		if !positive {
 			ok = !ok
 		}
@@ -763,7 +766,7 @@ func buildElseChainAOT(segs []elseSeg, env string, mode EscapeMode, escapeCatalo
 		return nil, 0, nil
 	}
 	s := segs[0]
-	if s.elseifPath == nil {
+	if s.elseif == nil {
 		return buildFunc(s.body, env, mode, escapeCatalog)
 	}
 	thenFn, th, err := buildFunc(s.body, env, mode, escapeCatalog)
@@ -774,9 +777,9 @@ func buildElseChainAOT(segs []elseSeg, env string, mode EscapeMode, escapeCatalo
 	if err != nil {
 		return nil, 0, err
 	}
-	path := s.elseifPath
+	cond := *s.elseif
 	return func(w *Writer, root map[string]any) {
-		if truthy(wLookup(w, root, path)) {
+		if EvalCond(w, root, cond) {
 			thenFn(w, root)
 		} else if elseFn != nil {
 			elseFn(w, root)

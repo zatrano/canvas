@@ -171,7 +171,14 @@ func (c *compiler) emitRange(coll, key, alias string, body []ast.Node) error {
 }
 
 func (c *compiler) emitIf(b ast.Block, kind OpKind) error {
-	return c.emitCond(kind, SplitPath(b.Args), "", b.Body)
+	cond, ok := ParseCond(b.Args)
+	if !ok {
+		return fmt.Errorf("canvas rt: bad if cond %q", b.Args)
+	}
+	if cond.Op != "" {
+		return fmt.Errorf("canvas rt: compare @if requires AOT path")
+	}
+	return c.emitCond(kind, cond.Truthy, "", b.Body)
 }
 
 func (c *compiler) emitCond(kind OpKind, path []string, name string, body []ast.Node) error {
@@ -220,19 +227,22 @@ func (c *compiler) emitElseChain(segs []elseSeg) error {
 		return nil
 	}
 	s := segs[0]
-	if s.elseifPath == nil {
+	if s.elseif == nil {
 		return c.emitNodes(s.body)
 	}
+	if s.elseif.Op != "" {
+		return fmt.Errorf("canvas rt: compare @elseif requires AOT path")
+	}
 	return c.emitCondWithBranches(
-		OpIfTruthy, s.elseifPath, "",
+		OpIfTruthy, s.elseif.Truthy, "",
 		func() error { return c.emitNodes(s.body) },
 		func() error { return c.emitElseChain(segs[1:]) },
 	)
 }
 
 type elseSeg struct {
-	elseifPath []string
-	body       []ast.Node
+	elseif *Cond
+	body   []ast.Node
 }
 
 func splitElseIf(nodes []ast.Node) []elseSeg {
@@ -247,7 +257,12 @@ func splitElseIf(nodes []ast.Node) []elseSeg {
 		}
 		if ok && d.Name == "elseif" {
 			segs = append(segs, cur)
-			cur = elseSeg{elseifPath: SplitPath(d.Args)}
+			c, cok := ParseCond(d.Args)
+			if !cok {
+				// Fallback: treat as truthy SplitPath for resilience.
+				c = Cond{Truthy: SplitPath(d.Args)}
+			}
+			cur = elseSeg{elseif: &c}
 			continue
 		}
 		cur.body = append(cur.body, n)

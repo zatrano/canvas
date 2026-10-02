@@ -3,7 +3,7 @@
 Package: `github.com/zatrano/canvas` · Brand: **Canvas** · Typical template root: `templates/` · Host API example: `http.Template("name", data)`.
 
 This file is the DX golden summary. Behavior is locked by `*_test.go` suites.
-Tokenizer: `lex/` · AST: `ast/` (nest blocks; foreach/if/auth leaf lower; layout/forelse/compare still regex in Engine).
+Tokenizer: `lex/` · AST: `ast/` (nest blocks; foreach/forelse/if(+simple compare)/auth leaf lower; layout/switch/complex if_expr still regex in Engine).
 
 ## Layouts
 
