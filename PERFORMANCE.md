@@ -1,12 +1,5 @@
-# Canvas performance — world’s-fastest path
+# Canvas performance
 
-See **[docs/performance.md](docs/performance.md)** for the full tables, methodology, and CI gates.
+Full tables, methodology, and CI gates: **[docs/performance.md](docs/performance.md)**.
 
-Quick verdict (v0.1.0, same list-page HTML):
-
-| Engine | ns/op | vs |
-|--------|------:|----|
-| **Canvas typed** | **~502** | **~3.6×** faster than quicktemplate |
-| **Canvas dynamic `RenderTo`** | **~1147** | beats QT; **≥50×** vs legacy dataGet |
-| quicktemplate | ~1818 | — |
-| `html/template`+dataGet | ~160k+ | — |
+**0 alloc** applies to AST-lowered list-page / nested-foreach `RenderTo`. Layout+component and struct-data paths allocate — see the docs.

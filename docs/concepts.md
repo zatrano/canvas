@@ -7,11 +7,11 @@
 | Method | Role |
 |--------|------|
 | `Render(name, data)` | string result (1 alloc for the string) |
-| `RenderTo(w, name, data)` | write into pooled `*rt.Writer` (0 alloc execute) |
-| `Share` / `AddFunc` / `Directive` | cross-view data and helpers |
+| `RenderTo(w, name, data)` | write into pooled `*rt.Writer` (0 alloc on AST-lowered list pages) |
+| `Share` / `AddFunc` / `Directive` | cross-view data and helpers — developer trust (see SECURITY.md) |
 | layouts / components | `@extends`, `@section`, `<x-*>` |
 
-Data model for the dynamic path is `map[string]any` (Blade-class). Typed path uses structs / string slices via `rt.Stream*`.
+Data model for the dynamic path is `map[string]any`. Typed path uses structs / string slices via `rt.Stream*`.
 
 ## Pipeline
 
@@ -24,7 +24,7 @@ source
 ```
 
 Templates that `CanASTLower()` skip `html/template` entirely on the hot path.
-Complex leftover directives still fall back to the regex → `html/template` path.
+Layout / include / component paths still fall back to the regex → `html/template` path (~318 allocs on a realistic layout+component bench).
 
 ## Writer
 
@@ -32,8 +32,12 @@ Complex leftover directives still fall back to the regex → `html/template` pat
 
 ```go
 w := rt.AcquireWriter()
-defer rt.ReleaseWriter(w)
+_ = eng.RenderTo(w, name, data)
+out := append([]byte(nil), w.Bytes()...) // copy if retaining past release
+rt.ReleaseWriter(w)
 ```
+
+`Bytes()` aliases the pool buffer and is **invalid after `ReleaseWriter`**.
 
 ## Packages
 
