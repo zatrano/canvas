@@ -21,9 +21,9 @@ Independent HTML template engine for Go. Zero external dependencies.
 [![Latest Release](https://img.shields.io/github/v/release/zatrano/canvas?display_name=tag&label=latest&color=brightgreen)](https://github.com/zatrano/canvas/releases/latest)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-red?logo=github)](SECURITY.md)
 
-[![Typed](https://img.shields.io/badge/Typed%20list-513%20ns-2ea44f?style=flat-square)](#benchmarks)
-[![vs QT](https://img.shields.io/badge/vs%20quicktemplate-~3.5×-2ea44f?style=flat-square)](#benchmarks)
-[![Dynamic](https://img.shields.io/badge/Dynamic%20RenderTo-1315%20ns-0366d6?style=flat-square)](#benchmarks)
+[![Typed](https://img.shields.io/badge/Typed%20list-735%20ns-2ea44f?style=flat-square)](#benchmarks)
+[![vs QT](https://img.shields.io/badge/vs%20quicktemplate-~2.7×-2ea44f?style=flat-square)](#benchmarks)
+[![Dynamic](https://img.shields.io/badge/Dynamic%20RenderTo-1646%20ns-0366d6?style=flat-square)](#benchmarks)
 [![Allocs](https://img.shields.io/badge/list--page%20RenderTo-0%20alloc-2ea44f?style=flat-square)](#benchmarks)
 [![Deps](https://img.shields.io/badge/Dependencies-0-lightgrey?style=flat-square)](go.mod)
 
@@ -31,7 +31,7 @@ Independent HTML template engine for Go. Zero external dependencies.
 
 ---
 
-**Status: v0.2.0 (experimental).** Directive-based template syntax, native AOT hot path. On the list-page bench, Canvas typed beats [quicktemplate](https://github.com/valyala/quicktemplate) by ~3× — see [docs/performance.md](docs/performance.md). Read [SECURITY.md](SECURITY.md) before production exposure.
+**Status: v0.2.0 (experimental).** Directive-based template syntax, native AOT hot path. On the list-page bench, Canvas typed beats [quicktemplate](https://github.com/valyala/quicktemplate) by ~2.7× — see [docs/performance.md](docs/performance.md). Read [SECURITY.md](SECURITY.md) before production exposure.
 
 ```text
 Your app / framework
@@ -133,24 +133,32 @@ Full matrix and fix hints: [SECURITY.md](SECURITY.md).
 
 ## Benchmarks
 
-Measured on **2026-10-01**, **v0.2.0**, Go **1.22+**, Windows/amd64. Absolute ns are **host-specific** and vary with load; treat CI gate **ratios** as authoritative (see [docs/performance.md](docs/performance.md)).
+Measured on **2026-10-02**, **v0.2.0**, Go **1.22+**, Windows/amd64, CPU **i5-1135G7 @ 2.40GHz**. Absolute ns are **host-specific** and vary with load; treat CI gate **ratios** as authoritative (see [docs/performance.md](docs/performance.md)).
 
-Same list-page HTML: `<h1>{{title}}</h1>` + 50× `<li>{{name}}</li>`. Numbers below are a **host-specific snapshot** (gate / bench medians on this machine).
+Same list-page HTML: `<h1>{{title}}</h1>` + 50× `<li>{{name}}</li>`. Numbers below are a **host-specific snapshot** (gate / bench medians on this machine, `-count=7`).
 
 ```bash
 go test -C bench -run 'Gate' -v
-go test . -bench='Benchmark(CanvasRTTo|HTMLTemplateDataGet)' -benchmem -count=5
-go test -C bench -bench='Benchmark(CanvasTyped|QuickTemplate)' -benchmem -count=5
+go test . -bench='Benchmark(CanvasRTTo|HTMLTemplateDataGet)' -benchmem -count=7
+go test -C bench -bench='Benchmark(CanvasTyped|QuickTemplate)' -benchmem -count=7
 ```
 
 ### Gate baselines (this host, `TestGate*`)
 
 | Metric | Value |
 |--------|------:|
-| CanvasTyped / quicktemplate | **~3.5×** (513 ns vs 1760 ns) |
-| Canvas `RenderTo` / quicktemplate | **~1.4×** (1315 ns vs 1920 ns) |
-| Canvas `RenderTo` / legacy `html/template`+`dataGet` | **≥20×** floor (observed ~25×–99×) |
+| CanvasTyped / quicktemplate | **2.71×** (738 ns vs 1998 ns) |
+| Canvas `RenderTo` / quicktemplate | **1.15×** (1582 ns vs 1812 ns) |
+| Canvas `RenderTo` / legacy `html/template`+`dataGet` | **67.8×** (1559 ns vs 105667 ns) |
 | `RenderTo` allocs/op | **0** |
+
+### Microbench medians (this host, `-count=7`)
+
+| Workload | Canvas | Rival | vs |
+|----------|-------:|------:|---:|
+| Typed list | **735 ns**, 0 alloc | quicktemplate **2042 ns** | **2.8×** |
+| Dynamic `RenderTo` | **1646 ns**, 0 alloc | quicktemplate **1812 ns** (gate) | **1.15×** |
+| Dynamic `RenderTo` | **1646 ns**, 0 alloc | html/template **81113 ns**, 572 alloc | **49×** |
 
 ### Allocations — scope of “0 alloc”
 
@@ -181,8 +189,8 @@ go test -C bench -run 'Gate' -v
 | Role | directives + typed streams | typed codegen | stdlib |
 | Runtime deps | none | bytebufferpool | stdlib |
 | Dynamic `map` data | yes (AOT) | no (gen only) | yes |
-| This-host typed list | **~513 ns #1 (~3.5× QT)** | ~1760 ns | — |
-| This-host dynamic list | **~1315 ns**, 0 alloc (~1.4× QT) | ~1920 ns | map / dataGet ~25×–99× slower |
+| This-host typed list | **735 ns #1 (~2.8× QT)** | 2042 ns | — |
+| This-host dynamic list | **1646 ns**, 0 alloc (~1.15× QT) | 1812 ns | map / dataGet **~49×** slower (81113 ns) |
 
 Canvas is **not** a quicktemplate fork. Full tables: [docs/performance.md](docs/performance.md).
 
