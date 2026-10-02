@@ -105,11 +105,43 @@ func applyYields(layout string, sections map[string]string) string {
 		return applyYieldsRegex(layout, sections)
 	}
 	replaced := replaceYieldsInNodes(doc.Nodes, sections)
+	replaced = replaceSectionShowsInNodes(replaced, sections)
 	src := nodesToSource(replaced)
 	if strings.TrimSpace(src) == "" && strings.TrimSpace(layout) != "" {
 		return applyYieldsRegex(layout, sections)
 	}
 	return src
+}
+
+func replaceSectionShowsInNodes(nodes []ast.Node, sections map[string]string) []ast.Node {
+	out := make([]ast.Node, 0, len(nodes))
+	for _, n := range nodes {
+		switch t := n.(type) {
+		case ast.Block:
+			if strings.ToLower(t.Name) == "section" && t.End == "show" {
+				key, _, ok := splitSectionArgs(t.Args)
+				if ok {
+					if body, found := sections[key]; found {
+						out = append(out, ast.Text{Value: body})
+						continue
+					}
+					// No child section: render the @show default body.
+					out = append(out, t.Body...)
+					continue
+				}
+			}
+			if strings.ToLower(t.Name) == "section" && t.End != "show" {
+				// Definition-only leftovers in a layout after extract — drop.
+				continue
+			}
+			cp := t
+			cp.Body = replaceSectionShowsInNodes(t.Body, sections)
+			out = append(out, cp)
+		default:
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 func replaceYieldsInNodes(nodes []ast.Node, sections map[string]string) []ast.Node {
@@ -198,6 +230,11 @@ func writeBlockSource(b *strings.Builder, blk ast.Block) {
 	}
 	b.WriteByte('\n')
 	b.WriteString(nodesToSource(blk.Body))
-	b.WriteString("\n@end")
+	b.WriteByte('\n')
+	if blk.End == "show" {
+		b.WriteString("@show")
+		return
+	}
+	b.WriteString("@end")
 	b.WriteString(name)
 }

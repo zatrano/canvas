@@ -158,6 +158,45 @@ func TestIfAndOrLowers(t *testing.T) {
 	}
 }
 
+func TestIfParenNotEmptyLowers(t *testing.T) {
+	cases := []struct {
+		src  string
+		want []string
+	}{
+		{`@if(($a || $b) && $c)yes@endif`, []string{"(and", "(or"}},
+		{`@if(!$a)x@endif`, []string{"(not"}},
+		{`@if(!empty($x))y@endif`, []string{"(not", "(empty"}},
+		{`@if(empty($x))z@endif`, []string{"(empty"}},
+		{`@if(isset($user.name))ok@endif`, []string{"issetPath"}},
+	}
+	for _, tc := range cases {
+		doc, err := ast.ParseSource(tc.src)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.src, err)
+		}
+		if !doc.CanASTLower() {
+			t.Fatalf("%s: want CanASTLower", tc.src)
+		}
+		out, ok, err := ast.Lower(doc)
+		if err != nil || !ok {
+			t.Fatalf("%s: ok=%v err=%v", tc.src, ok, err)
+		}
+		for _, w := range tc.want {
+			if !strings.Contains(out, w) {
+				t.Fatalf("%s: want %q in %q", tc.src, w, out)
+			}
+		}
+	}
+	// Richer calls remain regex.
+	rich, err := ast.ParseSource(`@if(count($items) > 0)x@endif`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rich.CanASTLower() {
+		t.Fatal("count() compare must not CanASTLower yet")
+	}
+}
+
 func TestSectionNest(t *testing.T) {
 	doc, err := ast.ParseSource(`@section('content')hello@endsection`)
 	if err != nil {
@@ -171,7 +210,16 @@ func TestSectionNest(t *testing.T) {
 		t.Fatalf("want section block, got %#v", doc.Nodes[0])
 	}
 	if doc.CanASTLower() {
-		t.Fatal("section must not CanASTLower yet (full layout lower still deferred; extract/yield use AST)")
+		// @section … @endsection is definition-only (empty lower); @show emits body.
+		out, ok, err := ast.Lower(doc)
+		if err != nil || !ok {
+			t.Fatalf("section endsection must AST-lower: ok=%v err=%v", ok, err)
+		}
+		if strings.TrimSpace(out) != "" {
+			t.Fatalf("endsection must emit empty, got %q", out)
+		}
+	} else {
+		t.Fatal("section must CanASTLower")
 	}
 
 	show, err := ast.ParseSource(`@section('title')App@show`)
@@ -182,6 +230,19 @@ func TestSectionNest(t *testing.T) {
 	if !ok || sb.Name != "section" {
 		t.Fatalf("show nest: %#v", show.Nodes[0])
 	}
+	if sb.End != "show" {
+		t.Fatalf("End want show got %q", sb.End)
+	}
+	if !show.CanASTLower() {
+		t.Fatal("section@show must CanASTLower")
+	}
+	sout, sok, serr := ast.Lower(show)
+	if serr != nil || !sok {
+		t.Fatalf("show lower: ok=%v err=%v", sok, serr)
+	}
+	if !strings.Contains(sout, "App") {
+		t.Fatalf("show must emit body, got %q", sout)
+	}
 
 	short, err := ast.ParseSource(`@section('title', 'Hi')`)
 	if err != nil {
@@ -189,6 +250,9 @@ func TestSectionNest(t *testing.T) {
 	}
 	if _, ok := short.Nodes[0].(ast.Directive); !ok {
 		t.Fatalf("short section must stay Directive, got %T", short.Nodes[0])
+	}
+	if !short.CanASTLower() {
+		t.Fatal("short section must CanASTLower")
 	}
 }
 

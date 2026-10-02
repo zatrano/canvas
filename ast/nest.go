@@ -10,6 +10,8 @@ type Block struct {
 	Name string
 	Args string
 	Body []Node
+	// End is the closer that terminated the block ("endif", "show", …).
+	End string
 }
 
 func (Block) node() {}
@@ -55,7 +57,7 @@ func NestDepth(nodes []Node, maxDepth int) ([]Node, error) {
 	if maxDepth <= 0 {
 		maxDepth = DefaultMaxNestingDepth
 	}
-	out, rest, err := nestUntil(nodes, "", 0, maxDepth)
+	out, rest, _, err := nestUntil(nodes, "", 0, maxDepth)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +67,9 @@ func NestDepth(nodes []Node, maxDepth int) ([]Node, error) {
 	return out, nil
 }
 
-func nestUntil(nodes []Node, endName string, depth, maxDepth int) (body []Node, rest []Node, err error) {
+// nestUntil returns body, remaining nodes, and the closer name that ended the
+// region (empty at top level).
+func nestUntil(nodes []Node, endName string, depth, maxDepth int) (body []Node, rest []Node, closedBy string, err error) {
 	for len(nodes) > 0 {
 		n := nodes[0]
 		nodes = nodes[1:]
@@ -75,7 +79,7 @@ func nestUntil(nodes []Node, endName string, depth, maxDepth int) (body []Node, 
 			continue
 		}
 		if endName != "" && (d.Name == endName || isAltCloser(endName, d.Name)) {
-			return body, nodes, nil
+			return body, nodes, d.Name, nil
 		}
 		if closer, isOpen := blockEnd[d.Name]; isOpen {
 			// Bare @empty is the @forelse empty-section marker, not @empty($x).
@@ -89,22 +93,22 @@ func nestUntil(nodes []Node, endName string, depth, maxDepth int) (body []Node, 
 				continue
 			}
 			if depth+1 > maxDepth {
-				return nil, nil, fmt.Errorf("canvas ast: nesting depth exceeds MaxNestingDepth (%d)", maxDepth)
+				return nil, nil, "", fmt.Errorf("canvas ast: nesting depth exceeds MaxNestingDepth (%d)", maxDepth)
 			}
-			inner, after, nerr := nestUntil(nodes, closer, depth+1, maxDepth)
+			inner, after, usedCloser, nerr := nestUntil(nodes, closer, depth+1, maxDepth)
 			if nerr != nil {
-				return nil, nil, nerr
+				return nil, nil, "", nerr
 			}
-			body = append(body, Block{Name: d.Name, Args: d.Args, Body: inner})
+			body = append(body, Block{Name: d.Name, Args: d.Args, Body: inner, End: usedCloser})
 			nodes = after
 			continue
 		}
 		body = append(body, d)
 	}
 	if endName != "" {
-		return nil, nil, fmt.Errorf("canvas ast: missing @%s", endName)
+		return nil, nil, "", fmt.Errorf("canvas ast: missing @%s", endName)
 	}
-	return body, nil, nil
+	return body, nil, "", nil
 }
 
 func isAltCloser(endName, name string) bool {

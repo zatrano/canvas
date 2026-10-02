@@ -570,8 +570,17 @@ func applyYieldsRegex(layout string, sections map[string]string) string {
 		}
 		return ""
 	})
-	// @show sections also render inline where defined in child — already extracted.
-	_ = reSectionShow
+	// @section … @show is an inline yield-with-default (Blade).
+	out = reSectionShow.ReplaceAllStringFunc(out, func(m string) string {
+		match := reSectionShow.FindStringSubmatch(m)
+		if len(match) != 3 {
+			return m
+		}
+		if value, ok := sections[match[1]]; ok {
+			return value
+		}
+		return strings.TrimSpace(match[2])
+	})
 	return out
 }
 

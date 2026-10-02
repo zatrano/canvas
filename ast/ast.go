@@ -231,6 +231,16 @@ func blockOK(b Block, aliases map[string]bool) bool {
 			return false
 		}
 		return canLowerNodes(b.Body, aliases)
+	case "section":
+		// @endsection = definition only (no output); @show = emit body.
+		// Body must itself be AST-lowerable.
+		return canLowerNodes(b.Body, aliases)
+	case "push", "prepend", "once", "slot":
+		// Layout-time collectors: leftover after resolve emits nothing.
+		// Still require body to be lowerable so nested content doesn't hide errors.
+		return canLowerNodes(b.Body, aliases)
+	case "component":
+		return false
 	default:
 		return false
 	}
@@ -345,6 +355,12 @@ func leafDirectiveOK(x Directive) bool {
 		return oldArgsOK(strings.TrimSpace(x.Args))
 	case "choice":
 		return choiceArgsOK(strings.TrimSpace(x.Args))
+	case "yield", "stack", "extends", "parent", "break", "continue":
+		// Layout leftovers: strip / ignore after resolve.
+		return true
+	case "section":
+		// Inline @section('name', 'value') — definition only.
+		return sectionShortArgs(x.Args)
 	default:
 		return false
 	}
@@ -413,7 +429,13 @@ func ParseSimpleCompare(expr string) (left, op, right string, ok bool) {
 }
 
 func condOK(args string) bool {
-	args = strings.TrimSpace(args)
+	args = unwrapParens(strings.TrimSpace(args))
+	if args == "" {
+		return false
+	}
+	if strings.HasPrefix(args, "!") {
+		return condOK(strings.TrimSpace(args[1:]))
+	}
 	if parts := splitLogic(args, "||"); len(parts) > 1 {
 		for _, p := range parts {
 			if !condOK(strings.TrimSpace(p)) {
@@ -430,6 +452,15 @@ func condOK(args string) bool {
 		}
 		return true
 	}
+	if name, inner, ok := parseCondCall(args); ok {
+		switch name {
+		case "empty", "isset":
+			return simpleDollarPath(inner)
+		default:
+			// count() and richer calls stay on the regex / if_expr path.
+			return false
+		}
+	}
 	if simpleDollarPath(args) {
 		return true
 	}
@@ -437,7 +468,109 @@ func condOK(args string) bool {
 	return ok
 }
 
-// splitLogic splits on op (&& or ||) outside quotes. No paren support yet.
+// parseCondCall parses name($inner) with balanced parens; inner must be the only arg.
+func parseCondCall(args string) (name, inner string, ok bool) {
+	args = strings.TrimSpace(args)
+	i := 0
+	for i < len(args) {
+		r := args[i]
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_' || (r >= '0' && r <= '9' && i > 0) {
+			i++
+			continue
+		}
+		break
+	}
+	if i == 0 {
+		return "", "", false
+	}
+	name = args[:i]
+	rest := strings.TrimSpace(args[i:])
+	if !strings.HasPrefix(rest, "(") || !strings.HasSuffix(rest, ")") {
+		return "", "", false
+	}
+	inner = strings.TrimSpace(rest[1 : len(rest)-1])
+	if inner == "" || !balancedParens(inner) {
+		return "", "", false
+	}
+	// Reject commas (multi-arg) for the AST subset.
+	if strings.Contains(inner, ",") {
+		return "", "", false
+	}
+	return name, inner, true
+}
+
+func balancedParens(s string) bool {
+	depth := 0
+	inQ := rune(0)
+	for i := 0; i < len(s); i++ {
+		r := rune(s[i])
+		if inQ != 0 {
+			if r == inQ {
+				inQ = 0
+			}
+			continue
+		}
+		if r == '\'' || r == '"' {
+			inQ = r
+			continue
+		}
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth < 0 {
+				return false
+			}
+		}
+	}
+	return depth == 0
+}
+
+func unwrapParens(s string) string {
+	for {
+		s = strings.TrimSpace(s)
+		if len(s) < 2 || s[0] != '(' || s[len(s)-1] != ')' {
+			return s
+		}
+		inner := s[1 : len(s)-1]
+		if !balancedParens(inner) {
+			return s
+		}
+		// Only unwrap when the outer pair matches (depth returns to 0 only at end).
+		depth := 0
+		inQ := rune(0)
+		ok := true
+		for i := 0; i < len(s); i++ {
+			r := rune(s[i])
+			if inQ != 0 {
+				if r == inQ {
+					inQ = 0
+				}
+				continue
+			}
+			if r == '\'' || r == '"' {
+				inQ = r
+				continue
+			}
+			switch r {
+			case '(':
+				depth++
+			case ')':
+				depth--
+				if depth == 0 && i != len(s)-1 {
+					ok = false
+				}
+			}
+		}
+		if !ok || depth != 0 {
+			return s
+		}
+		s = inner
+	}
+}
+
+// splitLogic splits on op (&& or ||) outside quotes and parentheses.
 func splitLogic(s, op string) []string {
 	if !strings.Contains(s, op) {
 		return nil
@@ -445,6 +578,7 @@ func splitLogic(s, op string) []string {
 	var parts []string
 	var b strings.Builder
 	inQ := rune(0)
+	depth := 0
 	for i := 0; i < len(s); {
 		r := rune(s[i])
 		if inQ != 0 {
@@ -461,7 +595,19 @@ func splitLogic(s, op string) []string {
 			i++
 			continue
 		}
-		if strings.HasPrefix(s[i:], op) {
+		if r == '(' {
+			depth++
+			b.WriteByte(s[i])
+			i++
+			continue
+		}
+		if r == ')' {
+			depth--
+			b.WriteByte(s[i])
+			i++
+			continue
+		}
+		if depth == 0 && strings.HasPrefix(s[i:], op) {
 			parts = append(parts, strings.TrimSpace(b.String()))
 			b.Reset()
 			i += len(op)
@@ -816,6 +962,15 @@ func lowerBlock(b *strings.Builder, blk Block, aliases map[string]bool) bool {
 		}
 		b.WriteString("{{ end }}")
 		return true
+	case "section":
+		// @show renders inline; @endsection is a definition (no output after resolve).
+		if blk.End == "show" {
+			return lowerNodes(b, blk.Body, aliases)
+		}
+		return true
+	case "push", "prepend", "once", "slot":
+		// Layout-time; leftovers are discarded (regex strip parity).
+		return true
 	default:
 		return false
 	}
@@ -916,6 +1071,9 @@ func lowerDirective(b *strings.Builder, x Directive, aliases map[string]bool) bo
 		b.WriteString(" }}")
 	case "else":
 		b.WriteString("{{ else }}")
+	case "yield", "stack", "extends", "parent", "break", "continue", "section":
+		// Layout leftovers after resolve — drop.
+		return true
 	default:
 		return false
 	}
@@ -923,7 +1081,10 @@ func lowerDirective(b *strings.Builder, x Directive, aliases map[string]bool) bo
 }
 
 func lowerCond(args string, aliases map[string]bool) string {
-	args = strings.TrimSpace(args)
+	args = unwrapParens(strings.TrimSpace(args))
+	if strings.HasPrefix(args, "!") {
+		return "(not (" + lowerCond(strings.TrimSpace(args[1:]), aliases) + "))"
+	}
 	if parts := splitLogic(args, "||"); len(parts) > 1 {
 		var b strings.Builder
 		b.WriteString("(or")
@@ -943,6 +1104,25 @@ func lowerCond(args string, aliases map[string]bool) string {
 		}
 		b.WriteByte(')')
 		return b.String()
+	}
+	if name, inner, ok := parseCondCall(args); ok {
+		switch name {
+		case "empty":
+			return "(empty (" + lowerExprIn(inner, aliases) + "))"
+		case "isset":
+			path := strings.TrimPrefix(strings.TrimSpace(inner), "$")
+			head, rest, hasDot := strings.Cut(path, ".")
+			if aliases[head] {
+				if !hasDot {
+					return "$" + head
+				}
+				return "(issetPath $" + head + " `" + rest + "`)"
+			}
+			if len(aliases) > 0 {
+				return "(issetPath $ `" + path + "`)"
+			}
+			return "(issetPath . `" + path + "`)"
+		}
 	}
 	if left, op, right, ok := ParseSimpleCompare(args); ok {
 		lf := lowerExprIn(left, aliases)

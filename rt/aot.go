@@ -365,6 +365,9 @@ func buildDirective(d ast.Directive) (RenderFunc, int, error) {
 		return func(w *Writer, root map[string]any) {
 			writeEscaped(w, transRoot(root, key))
 		}, 8, nil
+	case "yield", "stack", "extends", "parent", "break", "continue", "section":
+		// Layout leftovers after resolve.
+		return func(w *Writer, root map[string]any) {}, 0, nil
 	default:
 		return nil, 0, fmt.Errorf("canvas aot: unsupported @%s", d.Name)
 	}
@@ -476,6 +479,13 @@ func buildBlock(b ast.Block, env string, mode EscapeMode, escapeCatalog bool) (R
 				body(w, root)
 			}
 		}, h, nil
+	case "section":
+		if b.End == "show" {
+			return buildFunc(b.Body, env, mode, escapeCatalog)
+		}
+		return func(w *Writer, root map[string]any) {}, 0, nil
+	case "push", "prepend", "once", "slot":
+		return func(w *Writer, root map[string]any) {}, 0, nil
 	default:
 		return nil, 0, fmt.Errorf("canvas aot: unsupported block @%s", b.Name)
 	}
