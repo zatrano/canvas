@@ -1,6 +1,8 @@
+<div align="center">
+
 # Canvas
 
-Independent HTML template engine for Go. Zero framework dependencies.
+Independent HTML template engine for Go. Zero external dependencies.
 
 [![Tests](https://github.com/zatrano/canvas/actions/workflows/tests.yml/badge.svg)](https://github.com/zatrano/canvas/actions/workflows/tests.yml)
 [![Static Analysis](https://github.com/zatrano/canvas/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/zatrano/canvas/actions/workflows/static-analysis.yml)
@@ -19,11 +21,13 @@ Independent HTML template engine for Go. Zero framework dependencies.
 [![Latest Release](https://img.shields.io/github/v/release/zatrano/canvas?display_name=tag&label=latest&color=brightgreen)](https://github.com/zatrano/canvas/releases/latest)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-red?logo=github)](SECURITY.md)
 
-[![Typed](https://img.shields.io/badge/Typed%20list-502%20ns-2ea44f?style=flat-square)](#benchmarks)
-[![vs QT](https://img.shields.io/badge/vs%20quicktemplate-~3.6×-2ea44f?style=flat-square)](#benchmarks)
-[![Dynamic](https://img.shields.io/badge/Dynamic%20RenderTo-1147%20ns-0366d6?style=flat-square)](#benchmarks)
+[![Typed](https://img.shields.io/badge/Typed%20list-513%20ns-2ea44f?style=flat-square)](#benchmarks)
+[![vs QT](https://img.shields.io/badge/vs%20quicktemplate-~3.5×-2ea44f?style=flat-square)](#benchmarks)
+[![Dynamic](https://img.shields.io/badge/Dynamic%20RenderTo-1315%20ns-0366d6?style=flat-square)](#benchmarks)
 [![Allocs](https://img.shields.io/badge/list--page%20RenderTo-0%20alloc-2ea44f?style=flat-square)](#benchmarks)
-[![Deps](https://img.shields.io/badge/Runtime%20deps-0-lightgrey?style=flat-square)](go.mod)
+[![Deps](https://img.shields.io/badge/Dependencies-0-lightgrey?style=flat-square)](go.mod)
+
+</div>
 
 ---
 
@@ -105,7 +109,7 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 - Fast HTML escape (scan-then-copy; **Strict contextual** by default — see [SECURITY.md](SECURITY.md))
 - Zero external runtime deps (stdlib only)
 
-**Not a framework.** CSRF / auth / `http.Template` wiring lives in the consumer (ZATRANO’s `packages/template` addon).
+**Not included in v0.2.0:** CSRF, session/auth, HTTP handlers, or `html/template` adapters — those live in the consumer (ZATRANO’s `packages/template` addon). Canvas is the template engine only.
 
 ### Strict escape (default)
 
@@ -129,9 +133,9 @@ Full matrix and fix hints: [SECURITY.md](SECURITY.md).
 
 ## Benchmarks
 
-Numbers below are **host-specific** (re-measured **2026-10-01** gate run on this worktree, Go **1.22+**, Windows/amd64). Absolute ns varies by machine; CI gates enforce **ratios**, not absolute ns.
+Measured on **2026-10-01**, **v0.2.0**, Go **1.22+**, Windows/amd64. Absolute ns are **host-specific** and vary with load; treat CI gate **ratios** as authoritative (see [docs/performance.md](docs/performance.md)).
 
-Same list-page HTML: `<h1>{{title}}</h1>` + 50× `<li>{{name}}</li>`.
+Same list-page HTML: `<h1>{{title}}</h1>` + 50× `<li>{{name}}</li>`. Numbers below are a **host-specific snapshot** (gate / bench medians on this machine).
 
 ```bash
 go test -C bench -run 'Gate' -v
@@ -145,10 +149,8 @@ go test -C bench -bench='Benchmark(CanvasTyped|QuickTemplate)' -benchmem -count=
 |--------|------:|
 | CanvasTyped / quicktemplate | **~3.5×** (513 ns vs 1760 ns) |
 | Canvas `RenderTo` / quicktemplate | **~1.4×** (1315 ns vs 1920 ns) |
-| Canvas `RenderTo` / legacy `html/template`+`dataGet` | **~25×+** (gate floor 20×; observed ~99×) |
+| Canvas `RenderTo` / legacy `html/template`+`dataGet` | **≥20×** floor (observed ~25×–99×) |
 | `RenderTo` allocs/op | **0** |
-
-Ratios vs older absolute table (~502 ns typed): treat as host noise; trust the gate ratios above.
 
 ### Allocations — scope of “0 alloc”
 
