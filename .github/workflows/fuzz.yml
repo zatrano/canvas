@@ -1,0 +1,52 @@
+name: Fuzz
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # nightly UTC
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  fuzz:
+    name: fuzz-60s
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.25.x"
+          cache: true
+
+      - name: FuzzParse_Lex
+        run: go test . -run=^$ -fuzz=FuzzParse_Lex -fuzztime=60s -count=1
+
+      - name: FuzzParse_AST
+        run: go test . -run=^$ -fuzz=FuzzParse_AST -fuzztime=60s -count=1
+
+      - name: FuzzRender
+        run: go test . -run=^$ -fuzz=FuzzRender -fuzztime=60s -count=1
+
+      - name: FuzzStrictStructured (oracle, primary)
+        run: |
+          go test -C oracle -run=^$ -fuzz=FuzzStrictStructured -fuzztime=60s -count=1 2>&1 | tee /tmp/fuzz_structured.txt
+          echo "::notice::FuzzStrictStructured primary — grep execs below"
+          grep -E 'execs=|elapsed|fuzzing|interesting' /tmp/fuzz_structured.txt || true
+
+      - name: FuzzStrictNoInjection (oracle, slow baseline)
+        run: |
+          go test -C oracle -run=^$ -fuzz=FuzzStrictNoInjection -fuzztime=60s -count=1 2>&1 | tee /tmp/fuzz_noinjection.txt
+          echo "::notice::FuzzStrictNoInjection slow — grep execs below"
+          grep -E 'execs=|elapsed|fuzzing|interesting' /tmp/fuzz_noinjection.txt || true
+
+  combo-nightly:
+    name: combinatorial-full
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - name: Combinatorial Strict scan
+        run: go test -C oracle -count=1 -timeout 40m -run TestOracle_CombinatorialStrict -v

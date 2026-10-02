@@ -16,7 +16,7 @@ jobs:
           go-version: "1.25.x"
           cache: true
       - name: Unit tests
-        run: go test ./... -count=1 -timeout 5m -skip '^TestGate'
+        run: go test ./... -count=1 -timeout 5m
 
   race:
     name: race
@@ -27,7 +27,44 @@ jobs:
         with:
           go-version: "1.25.x"
           cache: true
-      - run: go test ./... -race -count=1 -timeout 10m -skip '^TestGate'
+      - run: go test ./... -race -count=1 -timeout 10m
+
+  poison:
+    name: canvas_poison
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - run: go test ./... -count=1 -timeout 10m -tags=canvas_poison
+
+  oracle-pr:
+    name: oracle-pr-subset
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - name: Oracle short (skip full combo)
+        run: go test -C oracle -count=1 -timeout 10m -short ./...
+
+  oracle-main:
+    name: oracle-full
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - name: Oracle full (combo included)
+        run: go test -C oracle -count=1 -timeout 40m ./...
 
   coverage:
     name: coverage
@@ -40,7 +77,7 @@ jobs:
           cache: true
       - name: Coverage
         run: |
-          go test ./... -count=1 -timeout 5m -skip '^TestGate' \
+          go test ./... -count=1 -timeout 5m \
             -covermode=atomic -coverprofile=coverage.out
           go tool cover -func=coverage.out | tail -1
 
