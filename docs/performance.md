@@ -2,24 +2,31 @@
 
 Same HTML shape for every engine: `<h1>{{title}}</h1>` + 50× `<li>{{name}}</li>`.
 
-Numbers are **host-specific**. Measured **2026-09-29**, **v0.1.0**, Go **1.25.0**, Windows/amd64, GOMAXPROCS=8, CPU **i5-1135G7 @ 2.40GHz**, `count=5` median (unless noted).
+Numbers are **host-specific**. Measured **2026-10-02**, **v0.2.0**, Go **1.22+**, Windows/amd64, CPU **i5-1135G7 @ 2.40GHz**, `count=7` median (unless noted).
 
 ```bash
-go test . -bench='Benchmark(CanvasRTTo|CanvasTyped|QuickTemplate|CeilingQTStyle|HTMLTemplateDataGet|Baseline_HTMLTemplate)' -benchmem -count=5
-go test -run 'Gate' -v
+go test -C bench -run 'Gate' -count=1 -v
+go test -C bench -bench='Benchmark(CanvasTyped|QuickTemplate)' -benchmem -count=7
+go test -bench='Benchmark(CanvasRTTo|HTMLTemplateDataGet)' -benchmem -count=7
 ```
 
-## Head-to-head (ns/op)
+## Head-to-head (ns/op, 2026-10-02)
 
 | Rank | Engine | ns/op | allocs | Notes |
 |-----:|--------|------:|-------:|-------|
-| 1 | Hand ceiling (ideal typed loop) | ~484 | 0 | |
-| 2 | **Canvas typed (`rt.StreamListPage`)** | **~502** | **0** | |
-| 3 | **Canvas dynamic AOT (`RenderTo`)** | **~1147** | **0** | AST-lowerable list page |
-| 4 | quicktemplate (real library) | ~1818 | 0 | Canvas typed **~3.6×** faster |
-| 5 | `html/template` + `map[string]any` | ~78k | 362 | Idiomatic baseline (~**25×**) |
-| 6 | `html/template` + struct | ~132k | 309 | Idiomatic (~**41×**) |
-| 7 | `html/template` + legacy `dataGet` | ~160k–284k | 572 | **≥50×** claim applies **only** to this path |
+| 1 | **Canvas typed (`rt.StreamListPage`)** | **735** | **0** | |
+| 2 | **Canvas dynamic AOT (`RenderTo`)** | **1646** | **0** | AST-lowerable list page |
+| 3 | quicktemplate (real library) | 2042 | 0 | Canvas typed **~2.8×** faster |
+| 4 | `html/template` + legacy `dataGet` | 81113 | 572 | Canvas dynamic **~49×** faster (microbench median) |
+
+## Gate baselines (this host, `TestGate*`)
+
+| Metric | Value | Floor |
+|--------|------:|------:|
+| CanvasTyped / quicktemplate | **2.71×** (738 ns vs 1998 ns) | ≥ 2.0× |
+| Canvas `RenderTo` / quicktemplate | **1.15×** (1582 ns vs 1812 ns) | ≥ 1.05× |
+| Canvas `RenderTo` / legacy `html/template`+`dataGet` | **67.8×** (1559 ns vs 105667 ns) | ≥ 20× |
+| List-page `RenderTo` allocs/op | **0** | ~0 |
 
 ## Realistic workloads (measurement-host medians)
 
@@ -62,7 +69,7 @@ resp.Write(out)
 | List-page `RenderTo` | **~0 allocs/op** |
 
 ```bash
-go test -run 'Gate' -v
+go test -C bench -run 'Gate' -v
 ```
 
 ## Ship max speed
