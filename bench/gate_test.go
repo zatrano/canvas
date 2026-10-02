@@ -1,4 +1,4 @@
-package canvas_test
+package bench_test
 
 import (
 	"fmt"

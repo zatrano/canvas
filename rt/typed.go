@@ -2,7 +2,7 @@ package rt
 
 // Typed stream API — what `canvas gen` emits for production builds.
 // Direct []byte writes, no map[string]any, no io.Writer indirection.
-// This is the absolute floor path and is designed to beat quicktemplate-class engines.
+// This is the absolute floor path for typed list-page streams.
 
 // ListItem is the typed row used by StreamListPage.
 type ListItem struct {

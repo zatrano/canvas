@@ -2,13 +2,14 @@ package canvas
 
 import (
 	"fmt"
-	"os"
 	"strings"
+
+	"github.com/zatrano/canvas/rt"
 )
 
 // buildSectionParentMap resolves @parent placeholders for a layout and its @extends chain.
 func (e *Engine) buildSectionParentMap(name string, seen []string, bags map[string]*stackBag, once map[string]bool) (map[string]string, error) {
-	raw, err := os.ReadFile(e.pathFor(name))
+	raw, err := e.readTemplate(name)
 	if err != nil {
 		return nil, err
 	}
@@ -100,11 +101,16 @@ func (e *Engine) resolveRootLayout(name string, seen []string, bags map[string]*
 	}
 	seen = append(seen, name)
 
-	raw, err := os.ReadFile(e.pathFor(name))
+	raw, err := e.readTemplate(name)
 	if err != nil {
-		return "", fmt.Errorf("canvas template [%s] not found at %s", name, e.pathFor(name))
+		return "", fmt.Errorf("canvas template [%s] not found at %s: %w", name, e.pathFor(name), err)
 	}
 	content := string(raw)
+	if e.escapeMode == rt.EscapeStrict {
+		if err = rejectLayoutDirectivesInForbiddenContexts(name, content); err != nil {
+			return "", err
+		}
+	}
 	content, err = e.expandIncludes(content, seen, bags, once)
 	if err != nil {
 		return "", err

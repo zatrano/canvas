@@ -357,8 +357,9 @@ func TestLangInsideForeachUsesRootLocale(t *testing.T) {
 `), 0o644)
 
 	engine := template.New(dir)
-	// Match foundation typed signature: trans(locale string, key string, replace...)
-	engine.AddFunc("trans", func(locale string, key string, _ ...any) string {
+	// canvasTrans receives root map so locale survives @foreach (dot = item).
+	engine.AddFunc("canvasTrans", func(data map[string]any, key string, _ ...any) string {
+		locale, _ := data["locale"].(string)
 		if locale != "tr" {
 			t.Fatalf("locale=%q want tr (dot must not be the loop item)", locale)
 		}
@@ -387,6 +388,9 @@ func TestLangInsideForeachUsesRootLocale(t *testing.T) {
 	}
 	if strings.Count(out, `>Sepete ekle</button>`) != 2 {
 		t.Fatalf("lang inside foreach missing: %s", out)
+	}
+	if !strings.Contains(out, `Merhaba Ada`) {
+		t.Fatalf("lang with replace missing: %s", out)
 	}
 	if strings.Count(out, `class="greet">Merhaba Ada`) != 2 {
 		t.Fatalf("lang with replace inside foreach: %s", out)

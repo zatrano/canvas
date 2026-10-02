@@ -1,7 +1,6 @@
 package canvas_test
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -168,13 +167,7 @@ Body
 `), 0o644)
 
 	engine := template.New(dir)
-	engine.AddFunc("trans", func(args ...any) string {
-		key := ""
-		if len(args) == 1 {
-			key = fmt.Sprint(args[0])
-		} else if len(args) >= 2 {
-			key = fmt.Sprint(args[1])
-		}
+	engine.AddFunc("canvasTrans", func(data map[string]any, key string, _ ...any) string {
 		if key == "messages.welcome" {
 			return "Welcome"
 		}
@@ -493,23 +486,22 @@ func TestCustomDirective(t *testing.T) {
 	}
 }
 
-func TestPhpDirectiveStripped(t *testing.T) {
+func TestUnknownCodeBlockNotExecuted(t *testing.T) {
 	dir := t.TempDir()
 	_ = os.WriteFile(filepath.Join(dir, "page.html"), []byte(`
-@php echo 'secret'; @endphp
+@widget('secret')
+@endwidget
 <p>ok</p>
 `), 0o644)
 
 	engine := template.New(dir)
 	out, err := engine.Render("page", nil)
-	if err != nil {
-		t.Fatal(err)
+	// Strict: unrecognized @endwidget is a compile error (block is not executed).
+	if err == nil {
+		t.Fatalf("expected Strict error for unknown @endwidget, out=%q", out)
 	}
-	if strings.Contains(out, "secret") {
-		t.Fatalf("php should not execute: %s", out)
-	}
-	if !strings.Contains(out, "ok") {
-		t.Fatalf("content after php missing: %s", out)
+	if !strings.Contains(err.Error(), "@endwidget") {
+		t.Fatalf("error should name @endwidget: %v", err)
 	}
 }
 

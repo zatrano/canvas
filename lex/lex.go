@@ -119,6 +119,16 @@ func (l *lexer) scanText() {
 func (l *lexer) scanDirective() error {
 	start := l.pos
 	startLine, startCol := l.line, l.col
+	// @@ → literal "@"; remaining text is not a directive.
+	if l.pos+1 < len(l.src) && l.src[l.pos+1] == '@' {
+		l.advance() // first @
+		l.advance() // second @
+		l.tokens = append(l.tokens, Token{
+			Kind: KindText, Lit: "@",
+			Line: startLine, Column: startCol, Offset: start,
+		})
+		return nil
+	}
 	l.advance() // @
 	nameStart := l.pos
 	for l.pos < len(l.src) {
@@ -317,5 +327,5 @@ var KnownDirectives = []string{
 	"component", "endcomponent", "slot", "endslot", "props", "aware",
 	"class", "style",
 	"csrf", "csrfMeta", "method", "auth", "guest", "can",
-	"json", "lang", "choice", "verbatim", "endverbatim", "php",
+	"json", "js", "lang", "choice", "verbatim", "endverbatim",
 }

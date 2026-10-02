@@ -78,8 +78,13 @@ func Parse(tokens []lex.Token) (*Document, error) {
 	return doc, nil
 }
 
-// ParseSource lexes, parses, then nests paired blocks.
+// ParseSource lexes, parses, then nests paired blocks (default MaxNestingDepth).
 func ParseSource(src string) (*Document, error) {
+	return ParseSourceDepth(src, DefaultMaxNestingDepth)
+}
+
+// ParseSourceDepth is ParseSource with an explicit nesting limit.
+func ParseSourceDepth(src string, maxDepth int) (*Document, error) {
 	toks, err := lex.Lex(src)
 	if err != nil {
 		return nil, err
@@ -88,7 +93,7 @@ func ParseSource(src string) (*Document, error) {
 	if err != nil {
 		return nil, err
 	}
-	nested, err := Nest(doc.Nodes)
+	nested, err := NestDepth(doc.Nodes, maxDepth)
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +321,7 @@ func leafDirectiveOK(x Directive) bool {
 	case "method":
 		_, ok := unquote(strings.TrimSpace(x.Args))
 		return ok
-	case "json", "class", "style",
+	case "json", "js", "class", "style",
 		"elseif",
 		"checked", "selected", "disabled", "readonly", "required":
 		return simpleDollarPath(strings.TrimSpace(x.Args))
@@ -737,7 +742,7 @@ func lowerDirective(b *strings.Builder, x Directive, aliases map[string]bool) bo
 		if !ok {
 			return false
 		}
-		b.WriteString("{{ trans (dataGet $ `locale`) `")
+		b.WriteString("{{ canvasTrans $ `")
 		b.WriteString(key)
 		b.WriteString("` }}")
 	case "old":

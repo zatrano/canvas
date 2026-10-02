@@ -1,4 +1,4 @@
-package canvas_test
+package bench_test
 
 import (
 	"fmt"
@@ -8,6 +8,8 @@ import (
 
 	"github.com/zatrano/canvas/rt"
 )
+
+const benchItems = 50
 
 // --- quicktemplate-class competitor (hand-written = what qtc emits) ---
 

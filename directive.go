@@ -10,7 +10,6 @@ var (
 	reCan           = regexp.MustCompile(`(?i)@can\s*\(\s*['"]([^'"]+)['"]\s*(?:,\s*\$([a-zA-Z0-9_.]+)\s*)?\)`)
 	reCannot        = regexp.MustCompile(`(?i)@cannot\s*\(\s*['"]([^'"]+)['"]\s*(?:,\s*\$([a-zA-Z0-9_.]+)\s*)?\)`)
 	reEnv           = regexp.MustCompile(`(?i)@env\s*\(\s*['"]([^'"]+)['"]\s*\)`)
-	rePhp           = regexp.MustCompile(`(?is)@php\s*(.*?)@endphp`)
 	reParent        = regexp.MustCompile(`(?i)@parent\b`)
 	reEndCan        = regexp.MustCompile(`(?i)@endcan\b`)
 	reEndCannot     = regexp.MustCompile(`(?i)@endcannot\b`)
@@ -110,10 +109,6 @@ func compileEnvDirectives(input string) string {
 	out = reEndEnv.ReplaceAllString(out, "{{ end }}")
 	out = reEndProduction.ReplaceAllString(out, "{{ end }}")
 	return out
-}
-
-func compilePhpDirectives(input string) string {
-	return rePhp.ReplaceAllString(input, "<!-- @php (unsupported) -->")
 }
 
 // expandProps wraps component templates with default prop merges from @props([...]).

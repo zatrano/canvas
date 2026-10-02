@@ -1,0 +1,274 @@
+[
+  {
+    "rule": "url-scheme",
+    "breaking_test": "TestMutationCoverage_Rules/url-scheme"
+  },
+  {
+    "rule": "unquoted-attr-spaces",
+    "breaking_test": "TestMutationCoverage_Rules/unquoted-space"
+  },
+  {
+    "rule": "on-forbid",
+    "breaking_test": "TestMutationCoverage_Rules/on-forbid"
+  },
+  {
+    "rule": "srcdoc-forbid",
+    "breaking_test": "TestMutationCoverage_Rules/srcdoc-forbid"
+  },
+  {
+    "rule": "multi-interp-value-start",
+    "breaking_test": "TestMutationCoverage_Rules/multi-interp-url"
+  },
+  {
+    "rule": "css-value-filter",
+    "breaking_test": "TestMutationCoverage_Rules/css-value-filter"
+  },
+  {
+    "rule": "script-echo-forbid",
+    "breaking_test": "TestStrict_ExpectedCompileErrors/aot/script_echo_bare"
+  },
+  {
+    "rule": "style-element-forbid",
+    "breaking_test": "TestStrict_ExpectedCompileErrors/aot/style_el_echo"
+  },
+  {
+    "rule": "style-whole-value-forbid",
+    "breaking_test": "TestStrict_ExpectedCompileErrors/aot/style_attr_whole"
+  },
+  {
+    "rule": "tag-name-forbid",
+    "breaking_test": "TestMutationCoverage_Rules/tag-name-forbid"
+  },
+  {
+    "rule": "unquoted-json-forbid",
+    "breaking_test": "TestMutationCoverage_Rules/unquoted-json-forbid"
+  },
+  {
+    "rule": "json-script-escape",
+    "breaking_test": "TestMutationCoverage_Rules/json-script-escape"
+  },
+  {
+    "rule": "attrs-on-reject",
+    "breaking_test": "TestAttrs_Strict/aot/on_reject"
+  },
+  {
+    "rule": "attrs-position",
+    "breaking_test": "TestAttrs_Strict/aot/position"
+  },
+  {
+    "rule": "attrs-url-scheme",
+    "breaking_test": "TestAttrs_Strict/aot/url_scheme"
+  },
+  {
+    "rule": "attrs-name-regex",
+    "breaking_test": "TestAttrs_Strict/aot/name_regex"
+  },
+  {
+    "rule": "attrs-srcdoc-style-reject",
+    "breaking_test": "TestAttrs_Strict/aot/srcdoc_style_reject"
+  },
+  {
+    "rule": "attrs-value-escape",
+    "breaking_test": "TestAttrs_Strict/aot/value_escape"
+  },
+  {
+    "rule": "attrs-safehtml-not-raw",
+    "breaking_test": "TestAttrs_Strict/aot/safehtml_not_raw"
+  },
+  {
+    "rule": "layout-yield-script",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/yield_in_script"
+  },
+  {
+    "rule": "layout-yield-style",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/yield_in_style"
+  },
+  {
+    "rule": "layout-yield-tag",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/yield_in_tag"
+  },
+  {
+    "rule": "layout-yield-attr-dq",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/yield_in_href"
+  },
+  {
+    "rule": "layout-yield-attr-sq",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/yield_in_href_sq"
+  },
+  {
+    "rule": "layout-yield-attr-uq",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/yield_unquoted_attr"
+  },
+  {
+    "rule": "layout-yield-between-attrs",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/yield_between_attrs"
+  },
+  {
+    "rule": "layout-yield-comment",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/yield_in_comment"
+  },
+  {
+    "rule": "layout-stack-script",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/stack_in_script_forbid"
+  },
+  {
+    "rule": "layout-stack-style",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/stack_in_style_forbid"
+  },
+  {
+    "rule": "layout-stack-tag",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/stack_in_tag"
+  },
+  {
+    "rule": "layout-stack-attr-dq",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/stack_in_href_forbid"
+  },
+  {
+    "rule": "layout-stack-attr-sq",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/stack_in_href_sq"
+  },
+  {
+    "rule": "layout-stack-attr-uq",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/stack_unquoted_attr"
+  },
+  {
+    "rule": "layout-stack-between-attrs",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/stack_between_attrs"
+  },
+  {
+    "rule": "layout-stack-comment",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/stack_in_comment"
+  },
+  {
+    "rule": "layout-slot-script",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/slot_in_script"
+  },
+  {
+    "rule": "layout-slot-style",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/slot_in_style"
+  },
+  {
+    "rule": "layout-slot-tag",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/slot_in_tag"
+  },
+  {
+    "rule": "layout-slot-attr-dq",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/slot_in_title_attr"
+  },
+  {
+    "rule": "layout-slot-attr-sq",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/slot_in_href_sq"
+  },
+  {
+    "rule": "layout-slot-attr-uq",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/slot_unquoted_attr"
+  },
+  {
+    "rule": "layout-slot-between-attrs",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/slot_between_attrs"
+  },
+  {
+    "rule": "layout-slot-comment",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/slot_in_comment"
+  },
+  {
+    "rule": "layout-include-script",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/include_in_script_forbid"
+  },
+  {
+    "rule": "layout-include-style",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/include_in_style"
+  },
+  {
+    "rule": "layout-include-tag",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/include_in_tag"
+  },
+  {
+    "rule": "layout-include-attr-dq",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/include_in_href"
+  },
+  {
+    "rule": "layout-include-attr-sq",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/include_in_href_sq"
+  },
+  {
+    "rule": "layout-include-attr-uq",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/include_unquoted_attr"
+  },
+  {
+    "rule": "layout-include-between-attrs",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/include_between_attrs"
+  },
+  {
+    "rule": "layout-include-comment",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/include_in_comment"
+  },
+  {
+    "rule": "layout-includeWhen-script",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/includeWhen_in_script"
+  },
+  {
+    "rule": "layout-includeIf-comment",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/includeIf_in_comment"
+  },
+  {
+    "rule": "layout-root-reject",
+    "breaking_test": "TestLayoutPlacement_StrictForbiddenCallSites/aot/root_layout_href_reject"
+  },
+  {
+    "rule": "lang-param-escape",
+    "breaking_test": "TestEscapeSurface_LangParamEscape/html/strict/text"
+  },
+  {
+    "rule": "lang-catalog-trusted",
+    "breaking_test": "TestEscapeSurface_LangCatalogTrusted/aot/text_raw"
+  },
+  {
+    "rule": "lang-catalog-escape-opt",
+    "breaking_test": "TestEscapeSurface_LangEscapeCatalogOptIn/aot"
+  },
+  {
+    "rule": "lang-attr-context",
+    "breaking_test": "TestEscapeSurface_LangCatalogTrusted/aot/attr_escaped"
+  },
+  {
+    "rule": "yield-default-var-escape",
+    "breaking_test": "TestEscapeSurface_YieldDefaultVar/aot"
+  },
+  {
+    "rule": "unknown-end-directive-error",
+    "breaking_test": "TestUnknownClosingDirective_Strict/aot/endfoo"
+  },
+  {
+    "rule": "attr-name-forbid",
+    "breaking_test": "TestStrict_ExpectedCompileErrors/aot/attr_name"
+  },
+  {
+    "rule": "between-attrs-forbid",
+    "breaking_test": "TestStrict_ExpectedCompileErrors/aot/between_attrs"
+  },
+  {
+    "rule": "include-in-script",
+    "breaking_test": "TestStrict_ExpectedCompileErrors/aot/include_in_script"
+  },
+  {
+    "rule": "json-attr-escape",
+    "breaking_test": "TestMutationCoverage_Rules/json-attr-escape"
+  },
+  {
+    "rule": "js-in-script",
+    "breaking_test": "TestStrict_ExpectedCompileErrors/aot/script_js_allowed"
+  },
+  {
+    "rule": "SafeHTML-only-raw",
+    "breaking_test": "TestSafeHTML_AndTemplateHTMLTrusted"
+  },
+  {
+    "rule": "Go-string-slot-escape",
+    "breaking_test": "TestSlot_TemplateBodyRaw_GoStringEscaped"
+  },
+  {
+    "rule": "unquoted-per-char",
+    "breaking_test": "TestEscapeUnquotedAttr_PerChar"
+  }
+]

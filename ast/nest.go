@@ -31,9 +31,20 @@ var blockEnd = map[string]string{
 	"production": "endproduction",
 }
 
-// Nest folds flat directive pairs into Block nodes.
+// DefaultMaxNestingDepth is used when Nest / ParseSource get maxDepth <= 0.
+const DefaultMaxNestingDepth = 200
+
+// Nest folds flat directive pairs into Block nodes (default depth limit).
 func Nest(nodes []Node) ([]Node, error) {
-	out, rest, err := nestUntil(nodes, "")
+	return NestDepth(nodes, DefaultMaxNestingDepth)
+}
+
+// NestDepth is Nest with an explicit max nesting depth for @if/@foreach/….
+func NestDepth(nodes []Node, maxDepth int) ([]Node, error) {
+	if maxDepth <= 0 {
+		maxDepth = DefaultMaxNestingDepth
+	}
+	out, rest, err := nestUntil(nodes, "", 0, maxDepth)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +54,7 @@ func Nest(nodes []Node) ([]Node, error) {
 	return out, nil
 }
 
-func nestUntil(nodes []Node, endName string) (body []Node, rest []Node, err error) {
+func nestUntil(nodes []Node, endName string, depth, maxDepth int) (body []Node, rest []Node, err error) {
 	for len(nodes) > 0 {
 		n := nodes[0]
 		nodes = nodes[1:]
@@ -61,7 +72,10 @@ func nestUntil(nodes []Node, endName string) (body []Node, rest []Node, err erro
 				body = append(body, d)
 				continue
 			}
-			inner, after, nerr := nestUntil(nodes, closer)
+			if depth+1 > maxDepth {
+				return nil, nil, fmt.Errorf("canvas ast: nesting depth exceeds MaxNestingDepth (%d)", maxDepth)
+			}
+			inner, after, nerr := nestUntil(nodes, closer, depth+1, maxDepth)
 			if nerr != nil {
 				return nil, nil, nerr
 			}

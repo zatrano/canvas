@@ -45,18 +45,23 @@ func main() {
 	}
 	fmt.Print(html)
 
-	// Zero-alloc hot path (reuse pooled writer):
+	// Pooled writer hot path:
 	w := rt.AcquireWriter()
-	defer rt.ReleaseWriter(w)
 	if err := eng.RenderTo(w, "hello", map[string]any{
 		"title": "Canvas",
 		"items": []map[string]any{{"name": "a"}},
 	}); err != nil {
+		rt.ReleaseWriter(w)
 		log.Fatal(err)
 	}
-	_ = w.Bytes()
+	// Bytes() aliases the pool buffer — copy or finish using it before ReleaseWriter.
+	out := append([]byte(nil), w.Bytes()...)
+	rt.ReleaseWriter(w)
+	_ = out
 }
 ```
+
+With `defer rt.ReleaseWriter(w)`, consume `Bytes()` before the function returns; do not keep the slice after release.
 
 ## Typed stream (absolute floor)
 
@@ -66,6 +71,7 @@ When you know the shape at compile time:
 w := rt.AcquireWriter()
 defer rt.ReleaseWriter(w)
 rt.StreamListPage(w, "Hello", []rt.ListItem{{Name: "a"}, {Name: "b"}})
+// use w.Bytes() before return / ReleaseWriter
 ```
 
 Or emit Go with `canvas/gen` from an AST document.
@@ -73,5 +79,6 @@ Or emit Go with `canvas/gen` from an AST document.
 ## Next
 
 - [Concepts](concepts.md) — Engine / AST / AOT / Writer
-- [Directives](directives.md) — Blade-class catalog
+- [Directives](directives.md) — directive catalog
 - [Performance](performance.md) — Benchmarks + gates
+- [Security](../SECURITY.md) — Escape scope + trust model

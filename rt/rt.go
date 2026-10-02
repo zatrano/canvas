@@ -1,10 +1,11 @@
 // Package rt is the Canvas high-performance render runtime.
 //
-// Hot path: AST → compiled Program (static segments + typed ops) → Execute.
+// Hot path: AST Ã¢â€ â€™ compiled Program (static segments + typed ops) Ã¢â€ â€™ Execute.
 // No html/template, no regex, minimal reflection (map[string]any fast path).
 package rt
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -23,6 +24,10 @@ type Ctx struct {
 	RangeIdx string // optional key alias
 	RangeI   any
 }
+
+// SafeHTML is a string that must be written without HTML escaping.
+// Use only for trusted markup (same role as html/template.HTML).
+type SafeHTML string
 
 // Writer is a pooled byte buffer with optional range frame (zero Ctx alloc).
 type Writer struct {
@@ -61,11 +66,22 @@ func ReleaseWriter(w *Writer) {
 	if w == nil {
 		return
 	}
+	if poisonEnabled {
+		poisonOnRelease(w)
+	}
 	w.Reset()
 	if cap(w.b) > 1<<20 {
 		return // drop oversized
 	}
 	writerPool.Put(w)
+}
+
+// CloneBytes returns a copy of the buffer that remains valid after ReleaseWriter.
+func (w *Writer) CloneBytes() []byte {
+	if w == nil || len(w.b) == 0 {
+		return nil
+	}
+	return append([]byte(nil), w.b...)
 }
 
 // Op is one compiled instruction.
@@ -182,8 +198,9 @@ func (p *Program) exec(w *Writer, ctx *Ctx, pc, end int) (int, error) {
 			w.WriteString(`">`)
 			pc++
 		case OpLang:
-			// locale from root; translation table optional via root["__trans"]
-			w.WriteString(trans(ctx, op.S))
+			// locale from root; translation table optional via root["__trans"].
+			// Catalog trusted by default (program path has no HTML context — escape).
+			writeEscapedString(w, FormatLang(trans(ctx, op.S), nil))
 			pc++
 		case OpOld:
 			writeEscaped(w, oldValue(ctx, op.S, op.Key))
@@ -246,7 +263,7 @@ func (p *Program) execRange(w *Writer, ctx *Ctx, bodyStart, bodyEnd int, keyAlia
 	if coll == nil {
 		return nil
 	}
-	// Fast path: top-level range, no nested aliases → zero map allocation.
+	// Fast path: top-level range, no nested aliases Ã¢â€ â€™ zero map allocation.
 	if ctx.Aliases == nil && !ctx.HasRange {
 		prevKey, prevVal, prevIdx, prevI := ctx.RangeKey, ctx.RangeVal, ctx.RangeIdx, ctx.RangeI
 		ctx.HasRange = true
@@ -708,6 +725,8 @@ func writeRaw(w *Writer, v any) {
 	switch x := v.(type) {
 	case string:
 		w.WriteString(x)
+	case SafeHTML:
+		w.WriteString(string(x))
 	case []byte:
 		w.Write(x)
 	default:
@@ -720,6 +739,8 @@ func writeEscaped(w *Writer, v any) {
 		return
 	}
 	switch x := v.(type) {
+	case SafeHTML:
+		w.WriteString(string(x))
 	case string:
 		writeEscapedString(w, x)
 	case int:
@@ -737,8 +758,80 @@ func writeEscaped(w *Writer, v any) {
 	case []byte:
 		writeEscapedString(w, string(x))
 	default:
+		// html/template.HTML and similar named string types: trusted raw.
+		if s, ok := trustedHTMLString(v); ok {
+			w.WriteString(s)
+			return
+		}
 		writeEscapedString(w, fmt.Sprint(x))
 	}
+}
+
+// trustedHTMLString reports whether v is html/template.HTML (or identical named type).
+func trustedHTMLString(v any) (string, bool) {
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() || rv.Kind() != reflect.String {
+		return "", false
+	}
+	t := rv.Type()
+	if t.PkgPath() == "html/template" && t.Name() == "HTML" {
+		return rv.String(), true
+	}
+	return "", false
+}
+
+func writeByKind(w *Writer, v any, kind EscapeKind) {
+	switch kind {
+	case EscURLAttr:
+		s := stringifyForEscape(v)
+		w.WriteString(EscapeURLAttr(s, true))
+	case EscURLBlock:
+		w.WriteString("#unsafe")
+	case EscUnquoted:
+		w.WriteString(EscapeUnquotedAttr(stringifyForEscape(v)))
+	case EscCSS:
+		w.WriteString(EscapeCSSValue(stringifyForEscape(v)))
+	case EscURLUnquoted:
+		s := EscapeURLAttr(stringifyForEscape(v), true)
+		if s == "#unsafe" {
+			w.WriteString(s)
+			return
+		}
+		w.WriteString(EscapeUnquotedAttr(s))
+	case EscJSON:
+		writeJSON(w, v)
+	case EscJSONAttr:
+		writeJSONAttr(w, v)
+	default:
+		writeEscaped(w, v)
+	}
+}
+
+func stringifyForEscape(v any) string {
+	if v == nil {
+		return ""
+	}
+	switch x := v.(type) {
+	case string:
+		return x
+	case SafeHTML:
+		return string(x)
+	default:
+		if s, ok := trustedHTMLString(v); ok {
+			return s
+		}
+		return fmt.Sprint(x)
+	}
+}
+
+func writeJSONAttr(w *Writer, v any) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		w.WriteString("null")
+		return
+	}
+	// HTML-attr escape the JSON text (so " Ã¢â€ â€™ &#34; inside double-quoted attrs).
+	writeEscapedString(w, string(b))
 }
 
 // WriteEscaped HTML-escapes s into w. Used by canvas gen typed streams.
@@ -746,7 +839,7 @@ func WriteEscaped(w *Writer, s string) { writeEscapedString(w, s) }
 
 // writeEscapedString HTML-escapes s into w (hot path).
 func writeEscapedString(w *Writer, s string) {
-	// Fast path: no escapable bytes → single append.
+	// Fast path: no escapable bytes Ã¢â€ â€™ single append.
 	for i := 0; i < len(s); i++ {
 		switch s[i] {
 		case '&', '<', '>', '"', '\'':
@@ -777,51 +870,30 @@ func writeEscapedStringSlow(w *Writer, s string) {
 }
 
 func writeJSON(w *Writer, v any) {
-	// Minimal JSON for common types; fall back to fmt for others.
-	switch x := v.(type) {
-	case nil:
+	// encoding/json default HTML escaping (& < > U+2028 U+2029 Ã¢â€ â€™ \uXXXX).
+	// Do not use Encoder.SetEscapeHTML(false); the previous hand-rolled
+	// writeJSONString omitted those escapes (see helpers.go:toJSON which already Marshal'd).
+	b, err := json.Marshal(v)
+	if err != nil {
 		w.WriteString("null")
-	case string:
-		w.AppendByte('"')
-		writeJSONString(w, x)
-		w.AppendByte('"')
-	case int:
-		w.WriteString(strconv.Itoa(x))
-	case bool:
-		if x {
-			w.WriteString("true")
-		} else {
-			w.WriteString("false")
-		}
-	default:
-		w.WriteString(strconv.Quote(fmt.Sprint(x)))
+		return
 	}
-}
-
-func writeJSONString(w *Writer, s string) {
-	for i := 0; i < len(s); i++ {
-		switch c := s[i]; c {
-		case '"', '\\':
-			w.AppendByte('\\')
-			w.AppendByte(c)
-		case '\n':
-			w.WriteString(`\n`)
-		case '\r':
-			w.WriteString(`\r`)
-		case '\t':
-			w.WriteString(`\t`)
-		default:
-			w.AppendByte(c)
-		}
-	}
+	w.Write(b)
 }
 
 func writeClassAttr(w *Writer, v any) {
 	switch x := v.(type) {
 	case string:
-		w.WriteString(x)
+		writeEscapedString(w, x)
 	case []string:
-		w.WriteString(strings.Join(x, " "))
+		first := true
+		for _, s := range x {
+			if !first {
+				w.AppendByte(' ')
+			}
+			first = false
+			writeEscapedString(w, s)
+		}
 	case map[string]any:
 		first := true
 		for k, val := range x {
@@ -832,7 +904,7 @@ func writeClassAttr(w *Writer, v any) {
 				w.AppendByte(' ')
 			}
 			first = false
-			w.WriteString(k)
+			writeEscapedString(w, k)
 		}
 	}
 }
@@ -840,7 +912,7 @@ func writeClassAttr(w *Writer, v any) {
 func writeStyleAttr(w *Writer, v any) {
 	switch x := v.(type) {
 	case string:
-		w.WriteString(x)
+		writeEscapedString(w, x)
 	case map[string]any:
 		first := true
 		for k, val := range x {
@@ -851,9 +923,9 @@ func writeStyleAttr(w *Writer, v any) {
 				w.AppendByte(';')
 			}
 			first = false
-			w.WriteString(k)
+			writeEscapedString(w, k)
 			w.AppendByte(':')
-			w.WriteString(fmt.Sprint(val))
+			writeEscapedString(w, fmt.Sprint(val))
 		}
 	}
 }

@@ -2,10 +2,11 @@ package canvas
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/zatrano/canvas/rt"
 )
 
 var (
@@ -13,6 +14,7 @@ var (
 	reSection         = regexp.MustCompile(`(?is)@section\s*\(\s*['"]([^'"]+)['"]\s*\)(.*?)@endsection`)
 	reSectionShow     = regexp.MustCompile(`(?is)@section\s*\(\s*['"]([^'"]+)['"]\s*\)(.*?)@show`)
 	reYieldDefault    = regexp.MustCompile(`(?i)@yield\s*\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]*)['"]\s*\)`)
+	reYieldDefaultVar = regexp.MustCompile(`(?i)@yield\s*\(\s*['"]([^'"]+)['"]\s*,\s*\$([a-zA-Z0-9_.]+)\s*\)`)
 	reYield           = regexp.MustCompile(`(?i)@yield\s*\(\s*['"]([^'"]+)['"]\s*\)`)
 	reInclude         = regexp.MustCompile(`(?i)@include\s*\(\s*['"]([^'"]+)['"]\s*\)`)
 	reIncludeIf       = regexp.MustCompile(`(?i)@includeIf\s*\(\s*['"]([^'"]+)['"]\s*\)`)
@@ -74,11 +76,16 @@ func (e *Engine) resolveViewBody(name string, seen []string, bags map[string]*st
 	}
 	seen = append(seen, name)
 
-	raw, err := os.ReadFile(e.pathFor(name))
+	raw, err := e.readTemplate(name)
 	if err != nil {
-		return "", fmt.Errorf("canvas template [%s] not found at %s", name, e.pathFor(name))
+		return "", fmt.Errorf("canvas template [%s] not found at %s: %w", name, e.pathFor(name), err)
 	}
 	content := string(raw)
+	if e.escapeMode == rt.EscapeStrict {
+		if err = rejectLayoutDirectivesInForbiddenContexts(name, content); err != nil {
+			return "", err
+		}
+	}
 	content, err = e.expandIncludes(content, seen, bags, once)
 	if err != nil {
 		return "", err
@@ -542,6 +549,17 @@ func applyYields(layout string, sections map[string]string) string {
 		}
 		return match[2]
 	})
+	out = reYieldDefaultVar.ReplaceAllStringFunc(out, func(m string) string {
+		match := reYieldDefaultVar.FindStringSubmatch(m)
+		if len(match) != 3 {
+			return m
+		}
+		if value, ok := sections[match[1]]; ok {
+			return value
+		}
+		// Keep {{ $var }} so compile applies contextual escape.
+		return "{{ $" + match[2] + " }}"
+	})
 	out = reYield.ReplaceAllStringFunc(out, func(m string) string {
 		match := reYield.FindStringSubmatch(m)
 		if len(match) != 2 {
@@ -552,7 +570,7 @@ func applyYields(layout string, sections map[string]string) string {
 		}
 		return ""
 	})
-	// @show sections also render inline where defined in child — already extracted.
+	// @show sections also render inline where defined in child Ã¢â‚¬â€ already extracted.
 	_ = reSectionShow
 	return out
 }
@@ -565,4 +583,53 @@ func (e *Engine) ViewName(path string) string {
 	}
 	rel = strings.TrimSuffix(rel, e.extension)
 	return strings.ReplaceAll(filepath.ToSlash(rel), "/", ".")
+}
+
+// Layout/include/yield/stack call sites must not appear in script, style, tag,
+// attribute, or HTML-comment contexts: section/push bodies are authored for text
+// but land in the call-site context after expansion.
+var reLayoutDirective = regexp.MustCompile(`(?i)@(extends|include|includeIf|includeWhen|includeUnless|includeFirst|component|yield|stack)\s*\(`)
+
+// {{ $slot }} / {!! $slot !!} placement (component default slot).
+var reSlotEcho = regexp.MustCompile(`(?i)\{\s*\{\s*\$slot\b|\{\s*!!\s*\$slot\b`)
+
+func rejectLayoutDirectivesInForbiddenContexts(tmplName, content string) error {
+	check := func(loc []int) error {
+		kind, ctx := rt.ScanEscapeDetail(content[:loc[0]], false, rt.EscapeStrict)
+		if !placementContextForbidden(kind, ctx) {
+			return nil
+		}
+		line, col := rt.LineCol(content, loc[0])
+		return rt.FormatForbidError(tmplName, line, col, ctx)
+	}
+	for _, loc := range reLayoutDirective.FindAllStringIndex(content, -1) {
+		if err := check(loc); err != nil {
+			return err
+		}
+	}
+	for _, loc := range reSlotEcho.FindAllStringIndex(content, -1) {
+		if err := check(loc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func placementContextForbidden(kind rt.EscapeKind, ctx string) bool {
+	if kind == rt.EscForbid {
+		return true
+	}
+	switch ctx {
+	case "script":
+		return true
+	case "style":
+		return true
+	case "tag-name", "tag":
+		return true
+	case "attribute-name", "attribute", "attribute-value":
+		return true
+	case "comment":
+		return true
+	}
+	return strings.HasPrefix(ctx, "attribute:")
 }

@@ -16,9 +16,15 @@ jobs:
           go-version: "1.25.x"
           cache: true
       - name: Performance gates vs quicktemplate
-        run: go test -run '^TestGate' -count=1 -timeout 8m -v
+        run: go test -C bench -run '^TestGate' -count=1 -timeout 8m -v
       - name: Microbenchmarks
         run: >
+          go test -C bench -run=^$
+          -bench='Benchmark(CanvasTyped|QuickTemplate)$'
+          -benchmem -count=1 -benchtime=500ms
+        # Root module also has non-QT benches:
+      - name: Root microbenchmarks
+        run: >
           go test . -run=^$
-          -bench='Benchmark(CanvasRTTo|CanvasTyped|QuickTemplate|HTMLTemplateDataGet)$'
+          -bench='Benchmark(CanvasRTTo|HTMLTemplateDataGet)$'
           -benchmem -count=1 -benchtime=500ms

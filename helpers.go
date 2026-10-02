@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/zatrano/canvas/rt"
 )
 
 // tplLit formats s as a Go-template string literal.
@@ -78,7 +80,39 @@ func dataGet(data any, path any) any {
 			}
 		}
 	}
-	return cur
+	return asTrustedHTML(cur)
+}
+
+// promoteSafeHTML converts top-level rt.SafeHTML values to template.HTML so the
+// html/template path treats them as trusted (AOT uses writeEscaped directly).
+func promoteSafeHTML(data map[string]any) map[string]any {
+	if data == nil {
+		return map[string]any{}
+	}
+	needCopy := false
+	for _, v := range data {
+		if _, ok := v.(rt.SafeHTML); ok {
+			needCopy = true
+			break
+		}
+	}
+	if !needCopy {
+		return data
+	}
+	out := make(map[string]any, len(data))
+	for k, v := range data {
+		out[k] = asTrustedHTML(v)
+	}
+	return out
+}
+
+func asTrustedHTML(v any) any {
+	switch x := v.(type) {
+	case rt.SafeHTML:
+		return template.HTML(x)
+	default:
+		return v
+	}
 }
 
 func structFieldByName(rv reflect.Value, name string) reflect.Value {

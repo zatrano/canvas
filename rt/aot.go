@@ -36,29 +36,41 @@ func (c *Compiled) Render(root map[string]any) (string, error) {
 	return string(w.Bytes()), nil
 }
 
-// CompileFunc lowers an AST-capable document to a single native RenderFunc.
+// CompileFunc lowers an AST-capable document to a single native RenderFunc (Strict escape).
 func CompileFunc(doc *ast.Document, env string) (c *Compiled, ok bool, err error) {
+	return CompileFuncMode(doc, env, EscapeStrict)
+}
+
+// CompileFuncMode is CompileFunc with an explicit escape mode.
+func CompileFuncMode(doc *ast.Document, env string, mode EscapeMode) (c *Compiled, ok bool, err error) {
+	return CompileFuncModeLang(doc, env, mode, false)
+}
+
+// CompileFuncModeLang is CompileFuncMode with @lang catalog escape policy.
+// escapeCatalog=false (default): catalog HTML trusted in text; always escaped in attributes.
+func CompileFuncModeLang(doc *ast.Document, env string, mode EscapeMode, escapeCatalog bool) (c *Compiled, ok bool, err error) {
 	if doc == nil {
 		return &Compiled{Fn: func(w *Writer, root map[string]any) {}, Env: env}, true, nil
 	}
 	if !doc.CanASTLower() {
 		return nil, false, nil
 	}
-	fn, hint, err := buildFunc(doc.Nodes, env)
+	fn, hint, err := buildFunc(doc.Nodes, env, mode, escapeCatalog)
 	if err != nil {
 		return nil, false, err
 	}
 	return &Compiled{Fn: fn, Hint: hint + 256, Env: env}, true, nil
 }
 
-func buildFunc(nodes []ast.Node, env string) (RenderFunc, int, error) {
+func buildFunc(nodes []ast.Node, env string, mode EscapeMode, escapeCatalog bool) (RenderFunc, int, error) {
 	if fn, hint, ok := tryFuseListPage(nodes); ok {
 		return fn, hint, nil
 	}
 	parts := make([]RenderFunc, 0, len(nodes))
 	hint := 0
+	var prefix strings.Builder
 	for _, n := range nodes {
-		fn, h, err := buildNode(n, env)
+		fn, h, err := buildNodeMode(n, env, mode, escapeCatalog, &prefix)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -79,6 +91,75 @@ func buildFunc(nodes []ast.Node, env string) (RenderFunc, int, error) {
 			}
 		}, hint, nil
 	}
+}
+
+func buildNodeMode(n ast.Node, env string, mode EscapeMode, escapeCatalog bool, prefix *strings.Builder) (RenderFunc, int, error) {
+	switch x := n.(type) {
+	case ast.Text:
+		if x.Value == "" {
+			return nil, 0, nil
+		}
+		prefix.WriteString(x.Value)
+		static := []byte(x.Value)
+		return func(w *Writer, root map[string]any) { w.Write(static) }, len(static), nil
+	case ast.Comment:
+		return nil, 0, nil
+	case ast.Echo:
+		kind, ctx := ScanEscapeDetail(prefix.String(), false, mode)
+		if kind == EscForbid {
+			return nil, 0, FormatForbidError("", 0, 0, ctx)
+		}
+		path := SplitPath(x.Expr)
+		prefix.WriteString(InterpMarker)
+		k := kind
+		return func(w *Writer, root map[string]any) {
+			writeByKind(w, wLookup(w, root, path), k)
+		}, 16, nil
+	case ast.RawEcho:
+		path := SplitPath(x.Expr)
+		prefix.WriteString(InterpMarker)
+		return func(w *Writer, root map[string]any) {
+			writeRaw(w, wLookup(w, root, path))
+		}, 16, nil
+	case ast.Directive:
+		if x.Name == "json" || x.Name == "js" {
+			kind, ctx := ScanEscapeDetail(prefix.String(), true, mode)
+			if x.Name == "js" && kind == EscHTML {
+				kind = EscJSON
+			}
+			if kind == EscForbid {
+				return nil, 0, FormatForbidError("", 0, 0, ctx)
+			}
+			path := SplitPath(x.Args)
+			prefix.WriteString(InterpMarker)
+			k := kind
+			return func(w *Writer, root map[string]any) {
+				writeByKind(w, wLookup(w, root, path), k)
+			}, 16, nil
+		}
+		if x.Name == "lang" {
+			return buildLangDirective(x, mode, escapeCatalog, prefix)
+		}
+		return buildDirective(x)
+	case ast.Block:
+		return buildBlock(x, env, mode, escapeCatalog)
+	default:
+		return nil, 0, fmt.Errorf("canvas aot: unsupported node")
+	}
+}
+
+func buildLangDirective(d ast.Directive, mode EscapeMode, escapeCatalog bool, prefix *strings.Builder) (RenderFunc, int, error) {
+	kind, ctxName := ScanEscapeDetail(prefix.String(), false, mode)
+	if kind == EscForbid {
+		return nil, 0, FormatForbidError("", 0, 0, ctxName)
+	}
+	key := strings.Trim(d.Args, `'" `)
+	prefix.WriteString(InterpMarker)
+	k, ctx, escCat := kind, ctxName, escapeCatalog
+	return func(w *Writer, root map[string]any) {
+		msg := FormatLang(transRoot(root, key), nil)
+		WriteLang(w, msg, k, ctx, escCat)
+	}, 8, nil
 }
 
 // tryFuseListPage collapses the common SSR shape into one closure:
@@ -227,45 +308,6 @@ func parseInlineSegs(body []ast.Node, alias string) ([]inlineSeg, bool) {
 	return segs, true
 }
 
-func buildNode(n ast.Node, env string) (RenderFunc, int, error) {
-	switch x := n.(type) {
-	case ast.Text:
-		if x.Value == "" {
-			return nil, 0, nil
-		}
-		static := []byte(x.Value)
-		return func(w *Writer, root map[string]any) { w.Write(static) }, len(static), nil
-	case ast.Comment:
-		return nil, 0, nil
-	case ast.Echo:
-		path := SplitPath(x.Expr)
-		if len(path) == 1 {
-			key := path[0]
-			return func(w *Writer, root map[string]any) {
-				if s, ok := root[key].(string); ok {
-					writeEscapedString(w, s)
-					return
-				}
-				writeEscaped(w, wLookup(w, root, path))
-			}, 16, nil
-		}
-		return func(w *Writer, root map[string]any) {
-			writeEscaped(w, wLookup(w, root, path))
-		}, 16, nil
-	case ast.RawEcho:
-		path := SplitPath(x.Expr)
-		return func(w *Writer, root map[string]any) {
-			writeRaw(w, wLookup(w, root, path))
-		}, 16, nil
-	case ast.Directive:
-		return buildDirective(x)
-	case ast.Block:
-		return buildBlock(x, env)
-	default:
-		return nil, 0, fmt.Errorf("canvas aot: unsupported node")
-	}
-}
-
 func buildDirective(d ast.Directive) (RenderFunc, int, error) {
 	switch d.Name {
 	case "csrf":
@@ -307,11 +349,6 @@ func buildDirective(d ast.Directive) (RenderFunc, int, error) {
 				w.WriteString(name)
 			}
 		}, 8, nil
-	case "lang":
-		key := strings.Trim(d.Args, `'" `)
-		return func(w *Writer, root map[string]any) {
-			w.WriteString(transRoot(root, key))
-		}, 8, nil
 	case "old":
 		parts := strings.Split(d.Args, ",")
 		key := strings.Trim(parts[0], `'" `)
@@ -333,19 +370,19 @@ func buildDirective(d ast.Directive) (RenderFunc, int, error) {
 	}
 }
 
-func buildBlock(b ast.Block, env string) (RenderFunc, int, error) {
+func buildBlock(b ast.Block, env string, mode EscapeMode, escapeCatalog bool) (RenderFunc, int, error) {
 	switch b.Name {
 	case "foreach":
-		return buildForeach(b, env, false)
+		return buildForeach(b, env, mode, escapeCatalog, false)
 	case "forelse":
-		return buildForeach(b, env, true)
+		return buildForeach(b, env, mode, escapeCatalog, true)
 	case "if":
-		return buildIfAOT(b, env, true)
+		return buildIfAOT(b, env, mode, escapeCatalog, true)
 	case "unless":
-		return buildIfAOT(b, env, false)
+		return buildIfAOT(b, env, mode, escapeCatalog, false)
 	case "isset":
 		path := SplitPath(b.Args)
-		body, h, err := buildFunc(b.Body, env)
+		body, h, err := buildFunc(b.Body, env, mode, escapeCatalog)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -356,7 +393,7 @@ func buildBlock(b ast.Block, env string) (RenderFunc, int, error) {
 		}, h, nil
 	case "empty":
 		path := SplitPath(b.Args)
-		body, h, err := buildFunc(b.Body, env)
+		body, h, err := buildFunc(b.Body, env, mode, escapeCatalog)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -366,7 +403,7 @@ func buildBlock(b ast.Block, env string) (RenderFunc, int, error) {
 			}
 		}, h, nil
 	case "auth":
-		body, h, err := buildFunc(b.Body, env)
+		body, h, err := buildFunc(b.Body, env, mode, escapeCatalog)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -376,7 +413,7 @@ func buildBlock(b ast.Block, env string) (RenderFunc, int, error) {
 			}
 		}, h, nil
 	case "guest":
-		body, h, err := buildFunc(b.Body, env)
+		body, h, err := buildFunc(b.Body, env, mode, escapeCatalog)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -387,7 +424,7 @@ func buildBlock(b ast.Block, env string) (RenderFunc, int, error) {
 		}, h, nil
 	case "error":
 		key := strings.Trim(b.Args, `'" `)
-		body, h, err := buildFunc(b.Body, env)
+		body, h, err := buildFunc(b.Body, env, mode, escapeCatalog)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -398,7 +435,7 @@ func buildBlock(b ast.Block, env string) (RenderFunc, int, error) {
 		}, h, nil
 	case "can":
 		ability := strings.Trim(b.Args, `'" `)
-		body, h, err := buildFunc(b.Body, env)
+		body, h, err := buildFunc(b.Body, env, mode, escapeCatalog)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -409,7 +446,7 @@ func buildBlock(b ast.Block, env string) (RenderFunc, int, error) {
 		}, h, nil
 	case "cannot":
 		ability := strings.Trim(b.Args, `'" `)
-		body, h, err := buildFunc(b.Body, env)
+		body, h, err := buildFunc(b.Body, env, mode, escapeCatalog)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -420,7 +457,7 @@ func buildBlock(b ast.Block, env string) (RenderFunc, int, error) {
 		}, h, nil
 	case "env":
 		name := strings.Trim(b.Args, `'" `)
-		body, h, err := buildFunc(b.Body, env)
+		body, h, err := buildFunc(b.Body, env, mode, escapeCatalog)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -430,7 +467,7 @@ func buildBlock(b ast.Block, env string) (RenderFunc, int, error) {
 			}
 		}, h, nil
 	case "production":
-		body, h, err := buildFunc(b.Body, env)
+		body, h, err := buildFunc(b.Body, env, mode, escapeCatalog)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -444,7 +481,7 @@ func buildBlock(b ast.Block, env string) (RenderFunc, int, error) {
 	}
 }
 
-func buildForeach(b ast.Block, env string, forelse bool) (RenderFunc, int, error) {
+func buildForeach(b ast.Block, env string, mode EscapeMode, escapeCatalog bool, forelse bool) (RenderFunc, int, error) {
 	coll, keyAlias, valAlias, ok := parseForeach(b.Args)
 	if !ok {
 		return nil, 0, fmt.Errorf("canvas aot: bad foreach")
@@ -462,7 +499,7 @@ func buildForeach(b ast.Block, env string, forelse bool) (RenderFunc, int, error
 	eh := 0
 	var err error
 	if forelse {
-		emptyFn, eh, err = buildFunc(emptyNodes, env)
+		emptyFn, eh, err = buildFunc(emptyNodes, env, mode, escapeCatalog)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -473,7 +510,7 @@ func buildForeach(b ast.Block, env string, forelse bool) (RenderFunc, int, error
 		return inl, eh + 64, nil
 	}
 
-	body, bh, err := buildFunc(bodyNodes, env)
+	body, bh, err := buildFunc(bodyNodes, env, mode, escapeCatalog)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -693,17 +730,17 @@ func runAnySliceW(w *Writer, root map[string]any, keyAlias, valAlias string, ite
 	w.aliases = prev
 }
 
-func buildIfAOT(b ast.Block, env string, positive bool) (RenderFunc, int, error) {
+func buildIfAOT(b ast.Block, env string, mode EscapeMode, escapeCatalog bool, positive bool) (RenderFunc, int, error) {
 	segs := splitElseIf(b.Body)
 	path := SplitPath(b.Args)
-	thenFn, th, err := buildFunc(segs[0].body, env)
+	thenFn, th, err := buildFunc(segs[0].body, env, mode, escapeCatalog)
 	if err != nil {
 		return nil, 0, err
 	}
 	var elseFn RenderFunc
 	eh := 0
 	if len(segs) > 1 {
-		elseFn, eh, err = buildElseChainAOT(segs[1:], env)
+		elseFn, eh, err = buildElseChainAOT(segs[1:], env, mode, escapeCatalog)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -721,19 +758,19 @@ func buildIfAOT(b ast.Block, env string, positive bool) (RenderFunc, int, error)
 	}, th + eh, nil
 }
 
-func buildElseChainAOT(segs []elseSeg, env string) (RenderFunc, int, error) {
+func buildElseChainAOT(segs []elseSeg, env string, mode EscapeMode, escapeCatalog bool) (RenderFunc, int, error) {
 	if len(segs) == 0 {
 		return nil, 0, nil
 	}
 	s := segs[0]
 	if s.elseifPath == nil {
-		return buildFunc(s.body, env)
+		return buildFunc(s.body, env, mode, escapeCatalog)
 	}
-	thenFn, th, err := buildFunc(s.body, env)
+	thenFn, th, err := buildFunc(s.body, env, mode, escapeCatalog)
 	if err != nil {
 		return nil, 0, err
 	}
-	elseFn, eh, err := buildElseChainAOT(segs[1:], env)
+	elseFn, eh, err := buildElseChainAOT(segs[1:], env, mode, escapeCatalog)
 	if err != nil {
 		return nil, 0, err
 	}
