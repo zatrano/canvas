@@ -71,11 +71,11 @@ func cmdGen(args []string) error {
 		fmt.Print(src)
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(*out), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(*out), 0o750); err != nil {
 		return err
 	}
 	if !strings.HasSuffix(*out, ".go") {
 		return fmt.Errorf("canvas gen: -out must end with .go")
 	}
-	return os.WriteFile(*out, []byte(src), 0o644)
+	return os.WriteFile(*out, []byte(src), 0o600)
 }

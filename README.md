@@ -109,7 +109,7 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 - Fast HTML escape (scan-then-copy; **Strict contextual** by default — see [SECURITY.md](SECURITY.md))
 - Zero external runtime deps (stdlib only)
 
-**Not included in v0.2.0:** CSRF, session/auth, or HTTP response helpers — those live in the consumer. ZATRANO wires Canvas via `framework/v3/core/ssr` (`package:enable template`); apps may also import Canvas directly.
+**Not included in v0.2.0:** CSRF, session/auth, or HTTP response helpers — those live in the consuming application. Import Canvas and call `canvas.New` / `Render` directly.
 
 ### Strict escape (default)
 
@@ -206,7 +206,7 @@ Canvas is **not** a quicktemplate fork. Full tables: [docs/performance.md](docs/
 
 ## Used by
 
-[ZATRANO V3](https://github.com/zatrano) uses Canvas as its default SSR engine via `framework/v3/core/ssr` (or direct `canvas` import).
+Canvas is a standalone Go library. Any application can import `github.com/zatrano/canvas` and render templates without a framework.
 
 ## License
 
