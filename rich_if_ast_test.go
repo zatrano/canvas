@@ -66,8 +66,8 @@ func TestRichIfExprASTLower(t *testing.T) {
 			}
 			dir := t.TempDir()
 			path := filepath.Join(dir, "t.html")
-			if err := os.WriteFile(path, []byte(tc.src), 0o644); err != nil {
-				t.Fatal(err)
+			if werr := os.WriteFile(path, []byte(tc.src), 0o644); werr != nil {
+				t.Fatal(werr)
 			}
 			eng := canvas.New(dir)
 			out, err := eng.Render("t", tc.data)

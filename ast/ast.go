@@ -14,9 +14,9 @@ import (
 	"github.com/zatrano/canvas/lex"
 )
 
-// CondExprLower, when set by the canvas package, compiles richer @if / echo
-// expressions (count, ternary, in_array, index, …) that the leaf AST subset
-// does not lower natively. Returns ok=false to keep the regex pipeline.
+// CondExprLower compiles richer @if / echo expressions (count, ternary,
+// in_array, index, …) when set by the canvas package. The leaf AST subset
+// does not lower those natively. Returns ok=false to keep the regex pipeline.
 var CondExprLower func(expr string, aliases map[string]bool) (lowered string, ok bool)
 
 // Node is one Canvas AST node.
