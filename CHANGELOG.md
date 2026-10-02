@@ -1,10 +1,20 @@
 # Changelog
 
-## Unreleased
+## [0.2.0] - 2026-10-02
+
+### Breaking
+
+- **`EscapeStrict` is the default** — contextual HTML escaping (URL scheme filter, unquoted attr escaping, compile-time forbids for `on*` / `srcdoc` / whole `style` value / `<script>`/`<style>` body / tag & attribute-name interpolation). Opt out with `Engine.SetEscapeMode(rt.EscapeLegacy)`.
+- **Layout call sites forbidden** in script, style, tag, attribute, and HTML-comment contexts: `@yield` / `@stack` / `{{ $slot }}` / `@include` / `@extends` / `@component` (context name in the error). Root layout files use the same placement forbid pass.
+- **Unrecognized `@end<name>` closers** are a Strict compile error (Legacy leaves them as literal text).
+- **Unquoted `style=…` interpolations** are forbidden.
+- **`@lang` catalog vs params:** catalog trusted in text; params always HTML-escaped; attributes always attr-escape; `SetLangEscapeCatalog(true)` for tenant-editable catalogs. Differs from v0.1.0 catalog-XSS surface (params were not interpolated on the default path).
+- **`@yield('name', $default)`** now expands missing sections to `{{ $default }}` (contextual escape). On v0.1.0 the form was left as literal text.
+- **`rt.SafeHTML` inside `@attrs` values** remains HTML-escaped (never raw in attributes).
 
 ### Added
 
-#### Strict escaping (breaking default)
+#### Strict escaping (default)
 
 - Contextual HTML escaping is **on by default** (`EscapeStrict`): URL scheme filter, unquoted attr escaping, compile-time forbid for `on*` / `srcdoc` / whole `style` value / `<script>`/`<style>` body / tag & attribute-name interpolation.
 - Migration off-ramp: `Engine.SetEscapeMode(rt.EscapeLegacy)`. See [SECURITY.md](SECURITY.md), [docs/strict-gaps.md](docs/strict-gaps.md), [docs/strict-overrejection.md](docs/strict-overrejection.md).

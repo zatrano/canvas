@@ -52,7 +52,7 @@ resp.Write(out)
 
 `defer rt.ReleaseWriter(w)` is fine if you finish using `Bytes()` **before the function returns** (defer runs on return). Do not store the slice for later use after release.
 
-## CI gates (v0.1.0)
+## CI gates (v0.2.0)
 
 | Gate | Floor |
 |------|-------|

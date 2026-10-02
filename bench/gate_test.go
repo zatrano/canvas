@@ -15,7 +15,7 @@ import (
 	"github.com/zatrano/canvas/rt"
 )
 
-// CI performance contract (v0.1.0): Canvas must beat quicktemplate on typed
+// CI performance contract (v0.2.0): Canvas must beat quicktemplate on typed
 // and dynamic list-page shapes, and crush the legacy html/template+dataGet path.
 //
 //	go test -run 'Gate' -v
