@@ -488,7 +488,7 @@ func applyStacks(content string, bags map[string]*stackBag) string {
 	})
 }
 
-func extractSections(content string) map[string]string {
+func extractSectionsRegex(content string) map[string]string {
 	sections := map[string]string{}
 	for _, match := range reSectionShort.FindAllStringSubmatch(content, -1) {
 		if len(match) == 3 {
@@ -538,7 +538,7 @@ func applySectionConditions(layout string, sections map[string]string) string {
 	return out
 }
 
-func applyYields(layout string, sections map[string]string) string {
+func applyYieldsRegex(layout string, sections map[string]string) string {
 	out := reYieldDefault.ReplaceAllStringFunc(layout, func(m string) string {
 		match := reYieldDefault.FindStringSubmatch(m)
 		if len(match) != 3 {
@@ -570,7 +570,7 @@ func applyYields(layout string, sections map[string]string) string {
 		}
 		return ""
 	})
-	// @show sections also render inline where defined in child Ã¢â‚¬â€ already extracted.
+	// @show sections also render inline where defined in child — already extracted.
 	_ = reSectionShow
 	return out
 }

@@ -76,6 +76,9 @@ func collectFields(nodes []ast.Node, root, item map[string]bool, alias *string) 
 					*alias = a
 				}
 			}
+			if x.Name == "if" || x.Name == "unless" {
+				collectCondFields(x.Args, root, item, *alias)
+			}
 			collectFields(x.Body, root, item, alias)
 		}
 	}
@@ -149,10 +152,29 @@ func emitNodes(b *strings.Builder, nodes []ast.Node, root map[string]bool, alias
 				}
 				b.WriteString(ind + "}\n")
 			case "if", "unless":
-				// Skip structured control in typed emit for now — still validated via CompileFunc.
-				if err := emitNodes(b, x.Body, root, alias, item, ind); err != nil {
+				cond, ok := rt.ParseCond(strings.TrimSpace(x.Args))
+				if !ok {
+					return fmt.Errorf("gen: bad %s condition %q", x.Name, x.Args)
+				}
+				expr, err := emitCondExpr(cond, root, alias, item)
+				if err != nil {
 					return err
 				}
+				if x.Name == "unless" {
+					expr = "!(" + expr + ")"
+				}
+				main, elseBody := splitGenElse(x.Body)
+				b.WriteString(ind + "if " + expr + " {\n")
+				if err := emitNodes(b, main, root, alias, item, ind+"\t"); err != nil {
+					return err
+				}
+				if len(elseBody) > 0 {
+					b.WriteString(ind + "} else {\n")
+					if err := emitNodes(b, elseBody, root, alias, item, ind+"\t"); err != nil {
+						return err
+					}
+				}
+				b.WriteString(ind + "}\n")
 			default:
 				if err := emitNodes(b, x.Body, root, alias, item, ind); err != nil {
 					return err
@@ -178,3 +200,129 @@ func exportIdent(s string) string {
 	}
 	return string(r)
 }
+
+func splitGenElse(body []ast.Node) (main, elseBody []ast.Node) {
+	for i, n := range body {
+		if d, ok := n.(ast.Directive); ok && d.Name == "else" && strings.TrimSpace(d.Args) == "" {
+			return body[:i], body[i+1:]
+		}
+	}
+	return body, nil
+}
+
+func collectCondFields(args string, root, item map[string]bool, alias string) {
+	cond, ok := rt.ParseCond(strings.TrimSpace(args))
+	if !ok {
+		return
+	}
+	walkCondFields(cond, root, item, alias)
+}
+
+func walkCondFields(c rt.Cond, root, item map[string]bool, alias string) {
+	for _, sub := range c.And {
+		walkCondFields(sub, root, item, alias)
+	}
+	for _, sub := range c.Or {
+		walkCondFields(sub, root, item, alias)
+	}
+	markPath := func(path []string) {
+		if len(path) == 0 {
+			return
+		}
+		if alias != "" && path[0] == alias {
+			if len(path) > 1 {
+				item[strings.Join(path[1:], ".")] = true
+			}
+			return
+		}
+		root[path[0]] = true
+	}
+	markPath(c.Truthy)
+	markPath(c.Left)
+	markPath(c.RightPath)
+}
+
+func emitCondExpr(c rt.Cond, root map[string]bool, alias string, item map[string]bool) (string, error) {
+	if len(c.Or) > 0 {
+		parts := make([]string, 0, len(c.Or))
+		for _, sub := range c.Or {
+			p, err := emitCondExpr(sub, root, alias, item)
+			if err != nil {
+				return "", err
+			}
+			parts = append(parts, "("+p+")")
+		}
+		return strings.Join(parts, " || "), nil
+	}
+	if len(c.And) > 0 {
+		parts := make([]string, 0, len(c.And))
+		for _, sub := range c.And {
+			p, err := emitCondExpr(sub, root, alias, item)
+			if err != nil {
+				return "", err
+			}
+			parts = append(parts, "("+p+")")
+		}
+		return strings.Join(parts, " && "), nil
+	}
+	if c.Op != "" {
+		left, err := emitPathValue(c.Left, root, alias, item)
+		if err != nil {
+			return "", err
+		}
+		if c.HasLit {
+			return fmt.Sprintf("%s %s %s", left, c.Op, litGo(c.RightLit)), nil
+		}
+		right, err := emitPathValue(c.RightPath, root, alias, item)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%s %s %s", left, c.Op, right), nil
+	}
+	if len(c.Truthy) > 0 {
+		v, err := emitPathValue(c.Truthy, root, alias, item)
+		if err != nil {
+			return "", err
+		}
+		return v + ` != ""`, nil
+	}
+	return "", fmt.Errorf("gen: empty condition")
+}
+
+func emitPathValue(path []string, root map[string]bool, alias string, item map[string]bool) (string, error) {
+	if len(path) == 0 {
+		return "", fmt.Errorf("gen: empty path")
+	}
+	if alias != "" && path[0] == alias {
+		if len(path) == 1 {
+			return "it", nil
+		}
+		return "it." + exportIdent(strings.Join(path[1:], ".")), nil
+	}
+	if len(path) > 1 {
+		// Typed emit only supports root scalars and item fields.
+		return "", fmt.Errorf("gen: nested root path $%s not supported in typed emit", strings.Join(path, "."))
+	}
+	_ = root
+	_ = item
+	return exportIdent(path[0]), nil
+}
+
+func litGo(v any) string {
+	switch t := v.(type) {
+	case string:
+		return strconv.Quote(t)
+	case bool:
+		if t {
+			return "true"
+		}
+		return "false"
+	case int:
+		return strconv.Itoa(t)
+	case float64:
+		return strconv.FormatFloat(t, 'g', -1, 64)
+	default:
+		return strconv.Quote(fmt.Sprint(v))
+	}
+}
+

@@ -171,7 +171,7 @@ func TestSectionNest(t *testing.T) {
 		t.Fatalf("want section block, got %#v", doc.Nodes[0])
 	}
 	if doc.CanASTLower() {
-		t.Fatal("section must not CanASTLower yet (layout compose still regex)")
+		t.Fatal("section must not CanASTLower yet (full layout lower still deferred; extract/yield use AST)")
 	}
 
 	show, err := ast.ParseSource(`@section('title')App@show`)
