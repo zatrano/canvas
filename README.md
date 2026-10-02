@@ -109,7 +109,7 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 - Fast HTML escape (scan-then-copy; **Strict contextual** by default — see [SECURITY.md](SECURITY.md))
 - Zero external runtime deps (stdlib only)
 
-**Not included in v0.2.0:** CSRF, session/auth, HTTP handlers, or `html/template` adapters — those live in the consumer (ZATRANO’s `packages/template` addon). Canvas is the template engine only.
+**Not included in v0.2.0:** CSRF, session/auth, or HTTP response helpers — those live in the consumer. ZATRANO’s `packages/template` is a pluggable framework addon (default engine: Canvas); apps may also import Canvas directly.
 
 ### Strict escape (default)
 
@@ -206,7 +206,7 @@ Canvas is **not** a quicktemplate fork. Full tables: [docs/performance.md](docs/
 
 ## Used by
 
-[ZATRANO V3](https://github.com/zatrano) uses Canvas as its SSR foundation (`packages/template` addon).
+[ZATRANO V3](https://github.com/zatrano) uses Canvas as its default SSR engine via the pluggable `packages/template` addon (or direct `canvas` import).
 
 ## License
 
