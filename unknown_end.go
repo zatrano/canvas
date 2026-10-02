@@ -27,9 +27,10 @@ func checkUnknownClosingDirectives(tmplName, src string, mode rt.EscapeMode) err
 	if mode != rt.EscapeStrict {
 		return nil
 	}
-	toks, err := lex.Lex(src)
-	if err != nil {
-		return nil // lex errors are reported by the normal parse path
+	toks, lexErr := lex.Lex(src)
+	if lexErr != nil {
+		// Lex errors are reported by the normal parse path.
+		return nil
 	}
 	verbatimDepth := 0
 	for _, tok := range toks {

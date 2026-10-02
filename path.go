@@ -113,8 +113,8 @@ func (e *Engine) templateExists(name string) bool {
 		return false
 	}
 	if runtime.GOOS != "windows" && strings.Contains(rel, `\`) {
-		fi, err := os.Stat(filepath.Join(e.directory, rel))
-		return err == nil && !fi.IsDir()
+		fi, statErr := os.Stat(filepath.Join(e.directory, rel))
+		return statErr == nil && !fi.IsDir()
 	}
 	f, err := fs.Stat(os.DirFS(e.directory), rel)
 	return err == nil && !f.IsDir()

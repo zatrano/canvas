@@ -107,7 +107,7 @@ func (e *Engine) resolveRootLayout(name string, seen []string, bags map[string]*
 	}
 	content := string(raw)
 	if e.escapeMode == rt.EscapeStrict {
-		if err := rejectLayoutDirectivesInForbiddenContexts(name, content); err != nil {
+		if err = rejectLayoutDirectivesInForbiddenContexts(name, content); err != nil {
 			return "", err
 		}
 	}

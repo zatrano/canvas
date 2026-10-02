@@ -82,7 +82,7 @@ func (e *Engine) resolveViewBody(name string, seen []string, bags map[string]*st
 	}
 	content := string(raw)
 	if e.escapeMode == rt.EscapeStrict {
-		if err := rejectLayoutDirectivesInForbiddenContexts(name, content); err != nil {
+		if err = rejectLayoutDirectivesInForbiddenContexts(name, content); err != nil {
 			return "", err
 		}
 	}

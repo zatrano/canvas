@@ -246,7 +246,7 @@ func (e *Engine) compileFast(name string) (*rt.Compiled, error) {
 	if err != nil {
 		return nil, fmt.Errorf("canvas template [%s] (%s): %w", name, e.pathFor(name), err)
 	}
-	if err := checkUnknownClosingDirectives(name, resolved, e.escapeMode); err != nil {
+	if err = checkUnknownClosingDirectives(name, resolved, e.escapeMode); err != nil {
 		return nil, err
 	}
 	doc, err := ast.ParseSourceDepth(resolved, e.nestingLimit())
@@ -292,7 +292,7 @@ func (e *Engine) compileHTML(name string) (*template.Template, error) {
 	if err != nil {
 		return nil, fmt.Errorf("canvas template [%s] (%s): %w", name, e.pathFor(name), err)
 	}
-	if err := checkUnknownClosingDirectives(name, resolved, e.escapeMode); err != nil {
+	if err = checkUnknownClosingDirectives(name, resolved, e.escapeMode); err != nil {
 		return nil, err
 	}
 
@@ -1372,9 +1372,7 @@ func compileJSONDirectives(out string, mode rt.EscapeMode, verbatim map[string]s
 var reAttrsDir = regexp.MustCompile(`@attrs\s*\(\s*\$([a-zA-Z0-9_.]+)\s*\)`)
 
 func compileAttrsDirectives(out string, mode rt.EscapeMode, verbatim map[string]string) (string, error) {
-	if mode == rt.EscapeLegacy {
-		// Legacy: still compile, but without position checks beyond html/template.
-	}
+	_ = mode // Legacy still compiles; Strict adds position checks below.
 	expand := func(s string) string {
 		for k, v := range verbatim {
 			s = strings.ReplaceAll(s, k, v)
