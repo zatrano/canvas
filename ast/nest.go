@@ -29,6 +29,17 @@ var blockEnd = map[string]string{
 	"cannot":     "endcannot",
 	"env":        "endenv",
 	"production": "endproduction",
+	"section":    "endsection",
+	"push":       "endpush",
+	"prepend":    "endprepend",
+	"once":       "endonce",
+	"component":  "endcomponent",
+	"slot":       "endslot",
+}
+
+// Alternate closers for a primary end name (Blade @section … @show).
+var blockEndAlt = map[string][]string{
+	"endsection": {"show"},
 }
 
 // DefaultMaxNestingDepth is used when Nest / ParseSource get maxDepth <= 0.
@@ -63,12 +74,17 @@ func nestUntil(nodes []Node, endName string, depth, maxDepth int) (body []Node, 
 			body = append(body, n)
 			continue
 		}
-		if endName != "" && d.Name == endName {
+		if endName != "" && (d.Name == endName || isAltCloser(endName, d.Name)) {
 			return body, nodes, nil
 		}
 		if closer, isOpen := blockEnd[d.Name]; isOpen {
 			// Bare @empty is the @forelse empty-section marker, not @empty($x).
 			if d.Name == "empty" && strings.TrimSpace(d.Args) == "" {
+				body = append(body, d)
+				continue
+			}
+			// @section('name', 'value') / @section('name', $var) — inline, no body.
+			if d.Name == "section" && sectionShortArgs(d.Args) {
 				body = append(body, d)
 				continue
 			}
@@ -89,4 +105,43 @@ func nestUntil(nodes []Node, endName string, depth, maxDepth int) (body []Node, 
 		return nil, nil, fmt.Errorf("canvas ast: missing @%s", endName)
 	}
 	return body, nil, nil
+}
+
+func isAltCloser(endName, name string) bool {
+	for _, alt := range blockEndAlt[endName] {
+		if alt == name {
+			return true
+		}
+	}
+	return false
+}
+
+// sectionShortArgs reports Blade inline @section('name', …) (no @endsection/@show).
+func sectionShortArgs(args string) bool {
+	args = strings.TrimSpace(args)
+	if args == "" {
+		return false
+	}
+	// Skip first quoted name, then look for a comma-separated second arg.
+	i := 0
+	if i < len(args) && (args[i] == '\'' || args[i] == '"') {
+		q := args[i]
+		i++
+		for i < len(args) && args[i] != q {
+			if args[i] == '\\' && i+1 < len(args) {
+				i += 2
+				continue
+			}
+			i++
+		}
+		if i < len(args) && args[i] == q {
+			i++
+		}
+	} else {
+		return false
+	}
+	for i < len(args) && (args[i] == ' ' || args[i] == '\t') {
+		i++
+	}
+	return i < len(args) && args[i] == ','
 }

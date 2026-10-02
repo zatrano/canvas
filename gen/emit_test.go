@@ -23,9 +23,27 @@ func TestEmitListPage(t *testing.T) {
 		"func StreamUsers(",
 		"rt.WriteEscaped",
 		"DO NOT EDIT",
+		"Title string",
+		"items []StreamUsersItem",
+		"it.Name",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}
+	}
+}
+
+func TestEmitAndOrTemplateStillCompiles(t *testing.T) {
+	src := `@if($a && $b)<p>{{ $a }}</p>@endif`
+	doc, err := ast.ParseSource(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := gen.Emit("pages", "StreamAnd", doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "func StreamAnd(") {
+		t.Fatalf("%s", out)
 	}
 }

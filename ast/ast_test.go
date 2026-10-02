@@ -141,6 +141,57 @@ func TestForelseKeyAliasLowers(t *testing.T) {
 	}
 }
 
+func TestIfAndOrLowers(t *testing.T) {
+	doc, err := ast.ParseSource(`@if($a && $b || $c)yes@endif`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !doc.CanASTLower() {
+		t.Fatal("&& / || must AST-lower")
+	}
+	out, ok, err := ast.Lower(doc)
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if !strings.Contains(out, "(or") || !strings.Contains(out, "(and") {
+		t.Fatalf("want and/or in %q", out)
+	}
+}
+
+func TestSectionNest(t *testing.T) {
+	doc, err := ast.ParseSource(`@section('content')hello@endsection`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Nodes) != 1 {
+		t.Fatalf("nodes=%d", len(doc.Nodes))
+	}
+	blk, ok := doc.Nodes[0].(ast.Block)
+	if !ok || blk.Name != "section" {
+		t.Fatalf("want section block, got %#v", doc.Nodes[0])
+	}
+	if doc.CanASTLower() {
+		t.Fatal("section must not CanASTLower yet (layout compose still regex)")
+	}
+
+	show, err := ast.ParseSource(`@section('title')App@show`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sb, ok := show.Nodes[0].(ast.Block)
+	if !ok || sb.Name != "section" {
+		t.Fatalf("show nest: %#v", show.Nodes[0])
+	}
+
+	short, err := ast.ParseSource(`@section('title', 'Hi')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := short.Nodes[0].(ast.Directive); !ok {
+		t.Fatalf("short section must stay Directive, got %T", short.Nodes[0])
+	}
+}
+
 func TestLowerForeach(t *testing.T) {
 	src := `@foreach($items as $item)<li>{{ $item.name }} {{ $title }}</li>@endforeach`
 	doc, err := ast.ParseSource(src)

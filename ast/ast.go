@@ -414,11 +414,72 @@ func ParseSimpleCompare(expr string) (left, op, right string, ok bool) {
 
 func condOK(args string) bool {
 	args = strings.TrimSpace(args)
+	if parts := splitLogic(args, "||"); len(parts) > 1 {
+		for _, p := range parts {
+			if !condOK(strings.TrimSpace(p)) {
+				return false
+			}
+		}
+		return true
+	}
+	if parts := splitLogic(args, "&&"); len(parts) > 1 {
+		for _, p := range parts {
+			if !condOK(strings.TrimSpace(p)) {
+				return false
+			}
+		}
+		return true
+	}
 	if simpleDollarPath(args) {
 		return true
 	}
 	_, _, _, ok := ParseSimpleCompare(args)
 	return ok
+}
+
+// splitLogic splits on op (&& or ||) outside quotes. No paren support yet.
+func splitLogic(s, op string) []string {
+	if !strings.Contains(s, op) {
+		return nil
+	}
+	var parts []string
+	var b strings.Builder
+	inQ := rune(0)
+	for i := 0; i < len(s); {
+		r := rune(s[i])
+		if inQ != 0 {
+			b.WriteByte(s[i])
+			if r == inQ {
+				inQ = 0
+			}
+			i++
+			continue
+		}
+		if r == '\'' || r == '"' {
+			inQ = r
+			b.WriteByte(s[i])
+			i++
+			continue
+		}
+		if strings.HasPrefix(s[i:], op) {
+			parts = append(parts, strings.TrimSpace(b.String()))
+			b.Reset()
+			i += len(op)
+			continue
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	parts = append(parts, strings.TrimSpace(b.String()))
+	if len(parts) < 2 {
+		return nil
+	}
+	for _, p := range parts {
+		if p == "" {
+			return nil
+		}
+	}
+	return parts
 }
 
 func simpleDollarPath(expr string) bool {
@@ -863,6 +924,26 @@ func lowerDirective(b *strings.Builder, x Directive, aliases map[string]bool) bo
 
 func lowerCond(args string, aliases map[string]bool) string {
 	args = strings.TrimSpace(args)
+	if parts := splitLogic(args, "||"); len(parts) > 1 {
+		var b strings.Builder
+		b.WriteString("(or")
+		for _, p := range parts {
+			b.WriteByte(' ')
+			b.WriteString(lowerCond(strings.TrimSpace(p), aliases))
+		}
+		b.WriteByte(')')
+		return b.String()
+	}
+	if parts := splitLogic(args, "&&"); len(parts) > 1 {
+		var b strings.Builder
+		b.WriteString("(and")
+		for _, p := range parts {
+			b.WriteByte(' ')
+			b.WriteString(lowerCond(strings.TrimSpace(p), aliases))
+		}
+		b.WriteByte(')')
+		return b.String()
+	}
 	if left, op, right, ok := ParseSimpleCompare(args); ok {
 		lf := lowerExprIn(left, aliases)
 		rf := right
