@@ -212,9 +212,9 @@ func TestSectionNest(t *testing.T) {
 	}
 	if doc.CanASTLower() {
 		// @section … @endsection is definition-only (empty lower); @show emits body.
-		out, lowered, err := ast.Lower(doc)
-		if err != nil || !lowered {
-			t.Fatalf("section endsection must AST-lower: ok=%v err=%v", lowered, err)
+		out, lowered, lerr := ast.Lower(doc)
+		if lerr != nil || !lowered {
+			t.Fatalf("section endsection must AST-lower: ok=%v err=%v", lowered, lerr)
 		}
 		if strings.TrimSpace(out) != "" {
 			t.Fatalf("endsection must emit empty, got %q", out)
