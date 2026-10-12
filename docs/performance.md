@@ -2,7 +2,7 @@
 
 Same HTML shape for every engine: `<h1>{{title}}</h1>` + 50× `<li>{{name}}</li>`.
 
-Numbers are **host-specific**. Measured **2026-10-02**, **v0.2.0**, Go **1.22+**, Windows/amd64, CPU **i5-1135G7 @ 2.40GHz**, `count=7` median (unless noted).
+Numbers are **host-specific**. Measured **2026-10-12**, **v0.2.0**, Go **1.26.9**, Windows/amd64, CPU **i5-6200U @ 2.30GHz** (2 cores / 4 threads), `GOMAXPROCS=4`, power plan Dengeli. Microbench figures are the median of `count=7`, `-benchtime=1s`. Gate ratios are one `count=1` run.
 
 ```bash
 go test -C bench -run 'Gate' -count=1 -v
@@ -10,35 +10,41 @@ go test -C bench -bench='Benchmark(CanvasTyped|QuickTemplate)' -benchmem -count=
 go test -bench='Benchmark(CanvasRTTo|HTMLTemplateDataGet)' -benchmem -count=7
 ```
 
-## Head-to-head (ns/op, 2026-10-02)
+## Head-to-head (ns/op, 2026-10-12)
+
+Microbench medians. Typed and quicktemplate shared one process (quicktemplate ran first). `RenderTo` and `html/template` shared another.
 
 | Rank | Engine | ns/op | allocs | Notes |
 |-----:|--------|------:|-------:|-------|
-| 1 | **Canvas typed (`rt.StreamListPage`)** | **735** | **0** | |
-| 2 | **Canvas dynamic AOT (`RenderTo`)** | **1646** | **0** | AST-lowerable list page |
-| 3 | quicktemplate (real library) | 2042 | 0 | Canvas typed **~2.8×** faster |
-| 4 | `html/template` + legacy `dataGet` | 81113 | 572 | Canvas dynamic **~49×** faster (microbench median) |
+| 1 | **Canvas typed (`rt.StreamListPage`)** | **926** | **0** | |
+| 2 | **Canvas dynamic AOT (`RenderTo`)** | **2811** | **0** | AST-lowerable list page |
+| 3 | quicktemplate (real library) | 4467 | 0 | separate from the gate below |
+| 4 | `html/template` + legacy `dataGet` | 112368 | 572 | `RenderTo` is **40×** this median |
 
 ## Gate baselines (this host, `TestGate*`)
 
 | Metric | Value | Floor |
 |--------|------:|------:|
-| CanvasTyped / quicktemplate | **2.71×** (738 ns vs 1998 ns) | ≥ 2.0× |
-| Canvas `RenderTo` / quicktemplate | **1.15×** (1582 ns vs 1812 ns) | ≥ 1.05× |
-| Canvas `RenderTo` / legacy `html/template`+`dataGet` | **67.8×** (1559 ns vs 105667 ns) | ≥ 20× |
+| CanvasTyped / quicktemplate | **3.69×** (1061 ns vs 3913 ns) | ≥ 2.0× |
+| Canvas `RenderTo` / quicktemplate | **0.80×** (4865 ns vs 3870 ns) | ≥ 1.05× |
+| Canvas `RenderTo` / legacy `html/template`+`dataGet` | **56.8×** (2714 ns vs 154286 ns) | ≥ 20× |
 | List-page `RenderTo` allocs/op | **0** | ~0 |
+
+The dynamic `RenderTo` / quicktemplate ratio on this host is under the CI floor. The floor is the Linux regression contract and is unchanged.
 
 ## Realistic workloads (measurement-host medians)
 
 | Scenario | ns/op | allocs |
 |----------|------:|-------:|
-| Nested foreach 10×10 (AOT) | ~3.9k | **0** |
-| Struct slice fields (dynamic) | ~14k | **~51** |
-| Layout + component + partial + foreach | ~56k | **~318** |
+| Nested foreach 10×10 (AOT) | 4721 | **0** |
+| Struct slice fields (dynamic) | 15036 | **51** |
+| Layout + component + partial + foreach | 61741 | **318** |
 
 Layout/include/component still go through the regex → `html/template` path. Lowering those to AOT is a **separate** task; this table is the measurement only.
 
-## Why Canvas wins vs quicktemplate
+## What this host showed
+
+Typed `StreamListPage` beat quicktemplate (**3.69×** in the gate, **926 ns** vs **4467 ns** in the microbench). Dynamic `RenderTo` stayed at **0 allocs** and beat `html/template`+`dataGet` (**56.8×** in the gate). The same dynamic path did **not** beat quicktemplate in the gate (**0.80×**).
 
 - Direct `[]byte` Writer — no `io.Writer` hop per chunk
 - Single escape scan (no dual `QWriter` E/N wrapper)
