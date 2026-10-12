@@ -40,7 +40,7 @@ The dynamic `RenderTo` / quicktemplate ratio on this host is under the CI floor.
 | Struct slice fields (dynamic) | 15036 | **51** |
 | Layout + component + partial + foreach | 61741 | **318** |
 
-Layout/include/component still go through the regex → `html/template` path. Lowering those to AOT is a **separate** task; this table is the measurement only.
+`@component` and `<x-*>` with a slot, `$attributes`, `@props` defaults, `@aware` inheritance, and literal props (including `<` and quotes) are inlined into Canvas syntax. Literals are escaped for the echo's HTML context and the page is rendered by AOT. The row above is the earlier html/template measurement.
 
 ## What this host showed
 

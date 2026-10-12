@@ -312,6 +312,31 @@ func (e *Engine) renderXComponent(name, attrStr, body string, seen []string, bag
 		slots[k] = expanded
 	}
 
+	source := partial
+	if body, defaults, peeled := peelComponentDirectives(partial); peeled {
+		props := make(map[string]componentProp, len(propAttrs)+len(defaults))
+		for k, v := range propAttrs {
+			if simpleDollarExpr(v) {
+				props[k] = componentProp{expr: v}
+			} else {
+				props[k] = componentProp{lit: v, isLit: true}
+			}
+		}
+		for k, v := range defaults {
+			if _, exists := props[k]; !exists {
+				props[k] = v
+			}
+		}
+		out, ok, ierr := inlinePrepared(e.escapeMode, body, props, slots, bagAttrs.String())
+		if ierr != nil {
+			return "", ierr
+		}
+		if ok {
+			return out, nil
+		}
+	}
+	partial = expandProps(source)
+
 	dictCall := "dict"
 	for k, v := range propAttrs {
 		dictCall = fmt.Sprintf(`%s %q %q`, dictCall, k, v)

@@ -198,6 +198,20 @@ func ScanEscapeKind(staticBefore string, jsonDirective bool, mode EscapeMode) Es
 	}
 }
 
+// EscapeInContext escapes value the same way an echo at this source position
+// would. EscForbid returns an error so the caller does not emit the raw value.
+func EscapeInContext(staticBefore, value string, mode EscapeMode) (string, error) {
+	kind, ctx := ScanEscapeDetail(staticBefore, false, mode)
+	if kind == EscForbid {
+		return "", FormatForbidError("", 1, 1, ctx)
+	}
+	w := AcquireWriter()
+	writeByKind(w, value, kind)
+	out := string(w.Bytes())
+	ReleaseWriter(w)
+	return out, nil
+}
+
 // ScanEscapeDetail returns kind plus context label for errors.
 func ScanEscapeDetail(staticBefore string, jsonDirective bool, mode EscapeMode) (EscapeKind, string) {
 	st, attr, _, _ := scanHTML(staticBefore)

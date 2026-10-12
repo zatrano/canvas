@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1] - 2026-10-12
+
+### Changed
+
+- `@component` and `<x-*>` write props, slots, `$attributes`, `@props` defaults, and `@aware` into the component source. The page compiles on the AOT path.
+- A quoted literal is escaped for the echo's HTML context. `{{ $type }}` with `<b>` renders `&lt;b&gt;`. A raw echo `{!! $type !!}` writes the literal as authored.
+- A slot body is spliced into the component, so an echo inside the slot is rendered.
+
 ## [0.2.0] - 2026-10-02
 
 ### Breaking

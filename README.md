@@ -17,7 +17,7 @@ Independent HTML template engine for Go. Zero external dependencies.
 
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/github/v/tag/zatrano/canvas?filter=v*&sort=semver&label=version&color=blue)](https://github.com/zatrano/canvas/releases/tag/v0.2.0)
+[![Version](https://img.shields.io/github/v/tag/zatrano/canvas?filter=v*&sort=semver&label=version&color=blue)](https://github.com/zatrano/canvas/releases/tag/v0.2.1)
 [![Latest Release](https://img.shields.io/github/v/release/zatrano/canvas?display_name=tag&label=latest&color=brightgreen)](https://github.com/zatrano/canvas/releases/latest)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-red?logo=github)](SECURITY.md)
 
@@ -31,7 +31,7 @@ Independent HTML template engine for Go. Zero external dependencies.
 
 ---
 
-**Status: v0.2.0 (experimental).** Directive-based template syntax, native AOT hot path. On the list-page bench, Canvas typed beats [quicktemplate](https://github.com/valyala/quicktemplate) by ~2.7× — see [docs/performance.md](docs/performance.md). Read [SECURITY.md](SECURITY.md) before production exposure.
+**Status: v0.2.1 (experimental).** Directive-based template syntax, native AOT hot path. On the list-page bench, Canvas typed beats [quicktemplate](https://github.com/valyala/quicktemplate) by ~2.7× — see [docs/performance.md](docs/performance.md). Read [SECURITY.md](SECURITY.md) before production exposure.
 
 ```text
 Your app / framework
@@ -46,7 +46,7 @@ Canvas owns lex → AST → CompileFunc → pooled Writer. Routing, auth, CSRF, 
 ## Install
 
 ```bash
-go get github.com/zatrano/canvas@v0.2.0
+go get github.com/zatrano/canvas@v0.2.1
 ```
 
 ## Quick start
@@ -109,7 +109,7 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 - Fast HTML escape (scan-then-copy; **Strict contextual** by default — see [SECURITY.md](SECURITY.md))
 - Zero external runtime deps (stdlib only)
 
-**Not included in v0.2.0:** CSRF, session/auth, or HTTP response helpers — those live in the consuming application. Import Canvas and call `canvas.New` / `Render` directly.
+**Not included in v0.2.1:** CSRF, session/auth, or HTTP response helpers — those live in the consuming application. Import Canvas and call `canvas.New` / `Render` directly.
 
 ### Strict escape (default)
 

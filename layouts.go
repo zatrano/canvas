@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/zatrano/canvas/rt"
@@ -291,13 +292,32 @@ func (e *Engine) expandComponents(content string, seen []string, bags map[string
 			slots[key] = expanded
 		}
 
-		partial, err := e.resolveViewWithStacks("components."+name, seen, bags, once)
+		partial, err := e.resolveViewBody("components."+name, seen, bags, once)
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
 			return "<!-- component error: " + err.Error() + " -->"
 		}
+		partial, err = e.expandXTags(partial, seen, bags, once, nil)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			return "<!-- component error: " + err.Error() + " -->"
+		}
+
+		inlined, ok, ierr := inlineComponent(e.escapeMode, partial, dataExpr, slots, "")
+		if ierr != nil {
+			if firstErr == nil {
+				firstErr = ierr
+			}
+			return "<!-- component error: " + ierr.Error() + " -->"
+		}
+		if ok {
+			return inlined
+		}
+		partial = expandProps(partial)
 
 		args := []string{}
 		if strings.TrimSpace(dataExpr) != "" {
@@ -317,6 +337,390 @@ func (e *Engine) expandComponents(content string, seen []string, bags map[string
 		return fmt.Sprintf(`{{ with mergeDict . (%s) }}%s{{ end }}`, args[0], partial)
 	})
 	return out, firstErr
+}
+
+// inlineComponent substitutes props, slots, @props defaults, and the attribute
+// bag into the component source. Literals are escaped for the echo's HTML
+// context. The result stays Canvas syntax, so the AOT compiler renders it.
+func inlineComponent(mode rt.EscapeMode, partial, dataExpr string, slots map[string]string, attrHTML string) (string, bool, error) {
+	body, defaults, ok := peelComponentDirectives(partial)
+	if !ok || componentNeedsDict(body) {
+		return "", false, nil
+	}
+	props, ok := simpleComponentProps(dataExpr)
+	if !ok {
+		return "", false, nil
+	}
+	for k, v := range defaults {
+		if _, exists := props[k]; !exists {
+			props[k] = v
+		}
+	}
+	return inlinePrepared(mode, body, props, slots, attrHTML)
+}
+
+func inlinePrepared(mode rt.EscapeMode, body string, props map[string]componentProp, slots map[string]string, attrHTML string) (string, bool, error) {
+	if strings.Contains(body, "$attributes") && !plainEchoUsesOnly(body, "attributes") {
+		return "", false, nil
+	}
+	names := make([]string, 0, len(props)+len(slots))
+	for name := range props {
+		names = append(names, name)
+	}
+	for name := range slots {
+		if name == "attributes" {
+			continue
+		}
+		names = append(names, name)
+	}
+	for _, name := range names {
+		if !plainEchoUsesOnly(body, name) {
+			return "", false, nil
+		}
+	}
+	out, err := rewriteComponentEchoes(mode, body, props, slots, attrHTML)
+	if err != nil {
+		return "", false, err
+	}
+	return out, true, nil
+}
+
+func peelComponentDirectives(partial string) (string, map[string]componentProp, bool) {
+	partial = strings.TrimSpace(partial)
+	defaults := map[string]componentProp{}
+	if strings.HasPrefix(partial, "{{ with mergeDefaults . (") {
+		body, defs, ok := unwrapMergeDefaults(partial)
+		if !ok {
+			return "", nil, false
+		}
+		partial = body
+		defaults = defs
+	}
+	if match := reProps.FindStringSubmatch(partial); len(match) == 2 {
+		defs, ok := simpleComponentProps(match[1])
+		if !ok {
+			return "", nil, false
+		}
+		for k, v := range defs {
+			if _, exists := defaults[k]; !exists {
+				defaults[k] = v
+			}
+		}
+		partial = reProps.ReplaceAllString(partial, "")
+	}
+	partial = reAware.ReplaceAllString(partial, "")
+	return strings.TrimSpace(partial), defaults, true
+}
+
+func unwrapMergeDefaults(partial string) (string, map[string]componentProp, bool) {
+	const open = "{{ with mergeDefaults . ("
+	rest := strings.TrimSpace(partial)[len(open):]
+	closeArgs := strings.Index(rest, ") }}")
+	if closeArgs < 0 {
+		return "", nil, false
+	}
+	defs, ok := parseCompiledDict(strings.TrimSpace(rest[:closeArgs]))
+	if !ok {
+		return "", nil, false
+	}
+	body := strings.TrimSpace(rest[closeArgs+len(") }}"):])
+	body = strings.TrimSpace(strings.TrimSuffix(body, "{{ end }}"))
+	return body, defs, true
+}
+
+func parseCompiledDict(src string) (map[string]componentProp, bool) {
+	src = strings.TrimSpace(src)
+	if src == "dict" {
+		return map[string]componentProp{}, true
+	}
+	if !strings.HasPrefix(src, "dict ") {
+		return nil, false
+	}
+	rest := strings.TrimSpace(src[len("dict "):])
+	out := map[string]componentProp{}
+	for rest != "" {
+		key, next, ok := takeTplString(rest)
+		if !ok || !identToken(key) {
+			return nil, false
+		}
+		rest = strings.TrimSpace(next)
+		prop, next, ok := takeDictValue(rest)
+		if !ok {
+			return nil, false
+		}
+		out[key] = prop
+		rest = strings.TrimSpace(next)
+	}
+	return out, true
+}
+
+func takeTplString(s string) (string, string, bool) {
+	if s == "" {
+		return "", "", false
+	}
+	if s[0] == '`' {
+		end := strings.IndexByte(s[1:], '`')
+		if end < 0 {
+			return "", "", false
+		}
+		return s[1 : 1+end], s[2+end:], true
+	}
+	if s[0] == '"' {
+		end := 1
+		for end < len(s) {
+			if s[end] == '\\' {
+				end += 2
+				continue
+			}
+			if s[end] == '"' {
+				lit, err := strconv.Unquote(s[:end+1])
+				if err != nil {
+					return "", "", false
+				}
+				return lit, s[end+1:], true
+			}
+			end++
+		}
+	}
+	return "", "", false
+}
+
+func takeDictValue(s string) (componentProp, string, bool) {
+	if strings.HasPrefix(s, "(dataGet . ") {
+		rest := s[len("(dataGet . "):]
+		path, next, ok := takeTplString(rest)
+		if !ok {
+			return componentProp{}, "", false
+		}
+		next = strings.TrimSpace(next)
+		if !strings.HasPrefix(next, ")") {
+			return componentProp{}, "", false
+		}
+		return componentProp{expr: "$" + path}, strings.TrimSpace(next[1:]), true
+	}
+	if strings.HasPrefix(s, "true") && (len(s) == 4 || s[4] == ' ') {
+		return componentProp{lit: "true", isLit: true}, strings.TrimSpace(s[4:]), true
+	}
+	if strings.HasPrefix(s, "false") && (len(s) == 5 || s[5] == ' ') {
+		return componentProp{lit: "false", isLit: true}, strings.TrimSpace(s[5:]), true
+	}
+	lit, next, ok := takeTplString(s)
+	if !ok {
+		return componentProp{}, "", false
+	}
+	return componentProp{lit: lit, isLit: true}, next, true
+}
+
+func componentNeedsDict(partial string) bool {
+	return strings.Contains(partial, "mergeDict") || strings.Contains(partial, "mergeDefaults") || strings.Contains(partial, "{{ with ") || strings.Contains(partial, "@props") || strings.Contains(partial, "@aware")
+}
+
+type componentProp struct {
+	expr  string
+	lit   string
+	isLit bool
+}
+
+func simpleComponentProps(expr string) (map[string]componentProp, bool) {
+	out := map[string]componentProp{}
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return out, true
+	}
+	expr = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(expr, "["), "]"))
+	if expr == "" {
+		return out, true
+	}
+	for _, part := range splitMapEntries(expr) {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		kv := strings.SplitN(part, "=>", 2)
+		if len(kv) != 2 {
+			return nil, false
+		}
+		key := strings.Trim(strings.TrimSpace(kv[0]), `'"`)
+		if !identToken(key) {
+			return nil, false
+		}
+		val := strings.TrimSpace(kv[1])
+		if simpleDollarExpr(val) {
+			out[key] = componentProp{expr: val}
+			continue
+		}
+		lit, ok := canvasQuoted(val)
+		if !ok {
+			return nil, false
+		}
+		out[key] = componentProp{lit: lit, isLit: true}
+	}
+	return out, true
+}
+
+func simpleDollarExpr(s string) bool {
+	if len(s) < 2 || s[0] != '$' {
+		return false
+	}
+	for _, part := range strings.Split(s[1:], ".") {
+		if !identToken(part) {
+			return false
+		}
+	}
+	return true
+}
+
+func identToken(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		switch {
+		case r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z':
+		case i > 0 && r >= '0' && r <= '9':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func canvasQuoted(s string) (string, bool) {
+	s = strings.TrimSpace(s)
+	if len(s) < 2 {
+		return "", false
+	}
+	q := s[0]
+	if (q != '\'' && q != '"') || s[len(s)-1] != q {
+		return "", false
+	}
+	inner := s[1 : len(s)-1]
+	if strings.ContainsRune(inner, rune(q)) || strings.Contains(inner, `\`) {
+		return "", false
+	}
+	return inner, true
+}
+
+func isIdentByte(c byte) bool {
+	return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
+}
+
+// plainEchoUsesOnly reports that every $name in src is exactly {{ $name }} or {!! $name !!}.
+func plainEchoUsesOnly(src, name string) bool {
+	needle := "$" + name
+	for from := 0; from < len(src); {
+		i := strings.Index(src[from:], needle)
+		if i < 0 {
+			return true
+		}
+		i += from
+		if i > 0 && isIdentByte(src[i-1]) {
+			from = i + len(needle)
+			continue
+		}
+		end := i + len(needle)
+		if end < len(src) && (isIdentByte(src[end]) || src[end] == '.') {
+			return false
+		}
+		if !wrappedPlainEcho(src, i, end) {
+			return false
+		}
+		from = end
+	}
+	return true
+}
+
+func wrappedPlainEcho(src string, dollarAt, end int) bool {
+	i := dollarAt
+	for i > 0 && (src[i-1] == ' ' || src[i-1] == '\t') {
+		i--
+	}
+	raw := false
+	if i >= 2 && src[i-2:i] == "{{" {
+		raw = false
+	} else if i >= 3 && src[i-3:i] == "{!!" {
+		raw = true
+	} else {
+		return false
+	}
+	j := end
+	for j < len(src) && (src[j] == ' ' || src[j] == '\t') {
+		j++
+	}
+	if raw {
+		return j+3 <= len(src) && src[j:j+3] == "!!}"
+	}
+	return j+2 <= len(src) && src[j:j+2] == "}}"
+}
+
+func rewriteComponentEchoes(mode rt.EscapeMode, partial string, props map[string]componentProp, slots map[string]string, attrHTML string) (string, error) {
+	var b strings.Builder
+	b.Grow(len(partial))
+	i := 0
+	for i < len(partial) {
+		raw := false
+		open := 0
+		closer := ""
+		switch {
+		case strings.HasPrefix(partial[i:], "{!!"):
+			raw = true
+			open = 3
+			closer = "!!}"
+		case strings.HasPrefix(partial[i:], "{{"):
+			open = 2
+			closer = "}}"
+		default:
+			b.WriteByte(partial[i])
+			i++
+			continue
+		}
+		rest := partial[i+open:]
+		idx := strings.Index(rest, closer)
+		if idx < 0 {
+			b.WriteString(partial[i:])
+			break
+		}
+		inner := strings.TrimSpace(rest[:idx])
+		if strings.HasPrefix(inner, "$") && identToken(inner[1:]) {
+			name := inner[1:]
+			if name == "attributes" {
+				b.WriteString(attrHTML)
+				i += open + idx + len(closer)
+				continue
+			}
+			if body, ok := slots[name]; ok {
+				b.WriteString(body)
+				i += open + idx + len(closer)
+				continue
+			}
+			if prop, ok := props[name]; ok {
+				if prop.isLit {
+					if raw {
+						b.WriteString(prop.lit)
+					} else {
+						esc, err := rt.EscapeInContext(b.String(), prop.lit, mode)
+						if err != nil {
+							return "", err
+						}
+						b.WriteString(esc)
+					}
+				} else if raw {
+					b.WriteString("{!! ")
+					b.WriteString(prop.expr)
+					b.WriteString(" !!}")
+				} else {
+					b.WriteString("{{ ")
+					b.WriteString(prop.expr)
+					b.WriteString(" }}")
+				}
+				i += open + idx + len(closer)
+				continue
+			}
+		}
+		b.WriteString(partial[i : i+open+idx+len(closer)])
+		i += open + idx + len(closer)
+	}
+	return b.String(), nil
 }
 
 func (e *Engine) expandEach(content string, seen []string, bags map[string]*stackBag, once map[string]bool) (string, error) {
