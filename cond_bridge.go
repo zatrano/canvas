@@ -12,7 +12,7 @@ func init() {
 	ast.CondExprLower = lowerCondViaIfExpr
 }
 
-// lowerCondViaIfExpr compiles Blade-like @if / {{ }} expressions (count, ternary,
+// lowerCondViaIfExpr compiles @if / {{ }} expressions (count, ternary,
 // in_array, index, …) through the shared if_expr compiler, rewriting foreach
 // aliases to __ZRV_* so output uses $alias / dataGet $alias.
 func lowerCondViaIfExpr(expr string, aliases map[string]bool) (string, bool) {

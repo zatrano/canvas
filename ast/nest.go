@@ -39,7 +39,7 @@ var blockEnd = map[string]string{
 	"slot":       "endslot",
 }
 
-// Alternate closers for a primary end name (Blade @section … @show).
+// Alternate closers for a primary end name (@section … @show).
 var blockEndAlt = map[string][]string{
 	"endsection": {"show"},
 }
@@ -120,7 +120,7 @@ func isAltCloser(endName, name string) bool {
 	return false
 }
 
-// sectionShortArgs reports Blade inline @section('name', …) (no @endsection/@show).
+// sectionShortArgs reports an inline @section('name', …) (no @endsection/@show).
 func sectionShortArgs(args string) bool {
 	args = strings.TrimSpace(args)
 	if args == "" {

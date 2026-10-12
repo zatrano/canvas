@@ -570,7 +570,7 @@ func applyYieldsRegex(layout string, sections map[string]string) string {
 		}
 		return ""
 	})
-	// @section … @show is an inline yield-with-default (Blade).
+	// @section … @show is an inline yield-with-default.
 	out = reSectionShow.ReplaceAllStringFunc(out, func(m string) string {
 		match := reSectionShow.FindStringSubmatch(m)
 		if len(match) != 3 {
