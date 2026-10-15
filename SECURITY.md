@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x | yes (best-effort) |
+| 1.0.x | yes |
+| < 1.0 | no |
 
 Report issues via GitHub. Do not open public issues for unfixed zero-days without coordinated disclosure.
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.0] - 2026-10-15
+
+First stable release. The code is the same as 0.2.1.
+
+### Changed
+
+- The public API of `github.com/zatrano/canvas` and `rt` follows semantic versioning. A breaking change requires a new major version.
+- Security fixes target 1.0.x. Versions before 1.0 are no longer supported (see [SECURITY.md](SECURITY.md)).
+
 ## [0.2.1] - 2026-10-12
 
 ### Changed
