@@ -3,7 +3,7 @@
 ## Install
 
 ```bash
-go get github.com/zatrano/canvas@v1.0.0
+go get github.com/zatrano/canvas@v1.0.1
 ```
 
 Requires Go 1.22+.

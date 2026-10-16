@@ -15,8 +15,8 @@ func TestPublishedCanvasBench(t *testing.T) {
 	}
 	text := string(raw)
 	for _, piece := range []string{
-		"Current release is **v1.0.0**",
-		"go get github.com/zatrano/canvas@v1.0.0",
+		"Current release is **v1.0.1**",
+		"go get github.com/zatrano/canvas@v1.0.1",
 		"| Typed list, gate | 1061 ns | 3913 ns | — | 3.69× |",
 		"| Dynamic `RenderTo`, gate | 4865 ns | 3870 ns | — | 0.80× |",
 		"| Typed vs quicktemplate | ≥ 2.0× |",

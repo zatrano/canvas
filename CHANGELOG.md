@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.1] - 2026-10-16
+
+### Fixed
+
+- A nested `@foreach` whose body takes the alias path (for example, it contains an `@if`) no longer breaks the enclosing loop. Before, the enclosing loop variable stopped resolving after its first iteration, so later iterations rendered empty. Both the AOT path (`rt.Compiled`) and the interpreter (`rt.Program`) are fixed.
+- `@foreach` over a struct slice now resolves `$item.Field` on the AOT path. It rendered empty before.
+- `@foreach($map as $k => $v)` now iterates maps on the AOT path, in sorted key order. It rendered nothing before.
+- `rt.Program` no longer falls back from the zero-alloc range frame into itself for collection types the frame does not handle.
+
+The typed and dynamic list-page paths the benchmark gate measures are unchanged.
+
 ## [1.0.0] - 2026-10-15
 
 First stable release. The code is the same as 0.2.1.

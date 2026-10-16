@@ -17,7 +17,7 @@ Independent HTML template engine for Go. Zero external dependencies.
 
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/github/v/tag/zatrano/canvas?filter=v*&sort=semver&label=version&color=blue)](https://github.com/zatrano/canvas/releases/tag/v1.0.0)
+[![Version](https://img.shields.io/github/v/tag/zatrano/canvas?filter=v*&sort=semver&label=version&color=blue)](https://github.com/zatrano/canvas/releases/tag/v1.0.1)
 [![Latest Release](https://img.shields.io/github/v/release/zatrano/canvas?display_name=tag&label=latest&color=brightgreen)](https://github.com/zatrano/canvas/releases/latest)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-red?logo=github)](SECURITY.md)
 
@@ -27,7 +27,7 @@ Independent HTML template engine for Go. Zero external dependencies.
 
 ---
 
-**Status: v1.0.0 (stable).** The public API follows semantic versioning: no breaking changes within 1.x. Directive-based template syntax, native AOT hot path. The list-page bench against [quicktemplate](https://github.com/valyala/quicktemplate) is in [Benchmarks](#benchmarks). Typed list is ahead. Dynamic `RenderTo` is not. Read [SECURITY.md](SECURITY.md) before production exposure.
+**Status: v1.0.1 (stable).** The public API follows semantic versioning: no breaking changes within 1.x. Directive-based template syntax, native AOT hot path. The list-page bench against [quicktemplate](https://github.com/valyala/quicktemplate) is in [Benchmarks](#benchmarks). Typed list is ahead. Dynamic `RenderTo` is not. Read [SECURITY.md](SECURITY.md) before production exposure.
 
 ```text
 Your app / framework
@@ -42,7 +42,7 @@ Canvas owns lex → AST → CompileFunc → pooled Writer. Routing, auth, CSRF, 
 ## Install
 
 ```bash
-go get github.com/zatrano/canvas@v1.0.0
+go get github.com/zatrano/canvas@v1.0.1
 ```
 
 ## Quick start
@@ -105,7 +105,7 @@ Full guides: **[Documentation](docs/getting-started.md)**.
 - Fast HTML escape (scan-then-copy; **Strict contextual** by default — see [SECURITY.md](SECURITY.md))
 - Zero external runtime deps (stdlib only)
 
-**Not included in v1.0.0:** CSRF, session/auth, or HTTP response helpers — those live in the consuming application. Import Canvas and call `canvas.New` / `Render` directly.
+**Not included in v1.0.1:** CSRF, session/auth, or HTTP response helpers — those live in the consuming application. Import Canvas and call `canvas.New` / `Render` directly.
 
 ### Strict escape (default)
 
@@ -129,7 +129,7 @@ Full matrix and fix hints: [SECURITY.md](SECURITY.md).
 
 ## Benchmarks
 
-Current release is **v1.0.0**. That tag is the same code as v0.2.1. The numbers below were measured on **2026-10-12** while the tree was **v0.2.0**, Go **1.26.9**, Windows/amd64, Intel Core i5-6200U @ 2.30GHz (2 cores / 4 threads), `GOMAXPROCS=4`, Balanced power plan. They were not re-measured for the v1.0.0 tag. Absolute ns are from this host.
+Current release is **v1.0.1**. The numbers below were measured on **2026-10-12** while the tree was **v0.2.0**, Go **1.26.9**, Windows/amd64, Intel Core i5-6200U @ 2.30GHz (2 cores / 4 threads), `GOMAXPROCS=4`, Balanced power plan. They were not re-measured for the v1.0.x tags; v1.0.0 is the same code as v0.2.1, and v1.0.1 changes only nested and reflective `@foreach` scoping, not the list-page paths below. Absolute ns are from this host.
 
 Same list-page HTML: `<h1>{{title}}</h1>` + 50× `<li>{{name}}</li>`. A gate ratio is one `go test -count=1` run; each side is an internal median of 7. A microbench ns is the median of `-count=7`, `-benchtime=1s`. Those two runs are not the same number. The typed microbench ratio depends on process order.
 
