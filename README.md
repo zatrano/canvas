@@ -31,7 +31,7 @@ Independent HTML template engine for Go. Zero external dependencies.
 
 ---
 
-**Status: v1.0.0 (stable).** The public API follows semantic versioning: no breaking changes within 1.x. Directive-based template syntax, native AOT hot path. On the list-page bench, Canvas typed beats [quicktemplate](https://github.com/valyala/quicktemplate) by ~2.7× — see [docs/performance.md](docs/performance.md). Read [SECURITY.md](SECURITY.md) before production exposure.
+**Status: v1.0.0 (stable).** The public API follows semantic versioning: no breaking changes within 1.x. Directive-based template syntax, native AOT hot path. On the list-page bench, Canvas typed beats [quicktemplate](https://github.com/valyala/quicktemplate) by 3.69× in the host gate — see [docs/performance.md](docs/performance.md). Read [SECURITY.md](SECURITY.md) before production exposure.
 
 ```text
 Your app / framework
@@ -133,7 +133,7 @@ Full matrix and fix hints: [SECURITY.md](SECURITY.md).
 
 ## Benchmarks
 
-Measured on **2026-10-12**, **v0.2.0**, Go **1.26.9**, Windows/amd64, CPU **i5-6200U @ 2.30GHz** (2 cores / 4 threads), `GOMAXPROCS=4`, power plan **Dengeli**. Absolute ns are **host-specific**. CI gate **floors** stay the regression contract (see [docs/performance.md](docs/performance.md)).
+Current release is **v1.0.0**. That tag is the same code as v0.2.1. The numbers below were measured on **2026-10-12** while the tree was **v0.2.0**, Go **1.26.9**, Windows/amd64, CPU **i5-6200U @ 2.30GHz** (2 cores / 4 threads), `GOMAXPROCS=4`, power plan **Dengeli**. They were not re-measured for the v1.0.0 tag. Absolute ns are **host-specific**. CI gate **floors** stay the regression contract (see [docs/performance.md](docs/performance.md)).
 
 Same list-page HTML: `<h1>{{title}}</h1>` + 50× `<li>{{name}}</li>`. Gate ratios are one `go test -count=1` run (each side is an internal median of 7). Microbench ns are the median of `-count=7`, `-benchtime=1s`.
 
@@ -170,7 +170,7 @@ On this host the dynamic `RenderTo` gate is under the CI floor of 1.05×. The fl
 | Struct-field data (dynamic path) | **51** | 15036 ns median |
 | Layout + include + component + foreach | **318** | 61741 ns median. Still on the regex / `html/template` fallback |
 
-### CI performance contract (v0.2.0)
+### CI performance contract (unchanged on v1.0.0)
 
 | Gate | Floor |
 |------|-------|
