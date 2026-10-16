@@ -264,7 +264,7 @@ func (p *Program) execRange(w *Writer, ctx *Ctx, bodyStart, bodyEnd int, keyAlia
 		return nil
 	}
 	// Fast path: top-level range, no nested aliases Ã¢â€ â€™ zero map allocation.
-	if ctx.Aliases == nil && !ctx.HasRange {
+	if ctx.Aliases == nil && !ctx.HasRange && fastRangeKind(coll) {
 		prevKey, prevVal, prevIdx, prevI := ctx.RangeKey, ctx.RangeVal, ctx.RangeIdx, ctx.RangeI
 		ctx.HasRange = true
 		ctx.RangeKey = valAlias
@@ -277,7 +277,10 @@ func (p *Program) execRange(w *Writer, ctx *Ctx, bodyStart, bodyEnd int, keyAlia
 		return p.execRangeFast(w, ctx, bodyStart, bodyEnd, keyAlias, coll)
 	}
 
-	prev := ctx.Aliases
+	// Alias path. An enclosing fast frame is folded into the alias map for
+	// the body and restored afterwards: the outer loop keeps writing
+	// RangeVal on its next iteration and must still resolve it.
+	prev, prevHas := ctx.Aliases, ctx.HasRange
 	var child map[string]any
 	if prev == nil {
 		child = make(map[string]any, 2)
@@ -295,7 +298,7 @@ func (p *Program) execRange(w *Writer, ctx *Ctx, bodyStart, bodyEnd int, keyAlia
 		ctx.HasRange = false
 	}
 	ctx.Aliases = child
-	defer func() { ctx.Aliases = prev }()
+	defer func() { ctx.Aliases, ctx.HasRange = prev, prevHas }()
 
 	switch c := coll.(type) {
 	case []map[string]any:
@@ -412,10 +415,17 @@ func (p *Program) execRangeFast(w *Writer, ctx *Ctx, bodyStart, bodyEnd int, key
 				return err
 			}
 		}
-		return nil
 	}
-	ctx.HasRange = false
-	return p.execRange(w, ctx, bodyStart, bodyEnd, keyAlias, ctx.RangeKey, coll)
+	return nil
+}
+
+// fastRangeKind reports whether execRangeFast iterates coll.
+func fastRangeKind(coll any) bool {
+	switch coll.(type) {
+	case []map[string]any, []any, []string:
+		return true
+	}
+	return false
 }
 
 func evalCond(p *Program, ctx *Ctx, op Op) bool {

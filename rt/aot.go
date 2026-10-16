@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/zatrano/canvas/ast"
@@ -663,9 +664,24 @@ func runMapSliceW(w *Writer, root map[string]any, keyAlias, valAlias string, ite
 		w.rv, w.rk, w.ri, w.rki = prevRV, prevRK, prevRI, prevRKI
 		return
 	}
-	// nested
-	prev := w.aliases
-	child := make(map[string]any, 4)
+	child, restore := w.pushAliases()
+	for i := 0; i < len(items); i++ {
+		if keyAlias != "" {
+			child[keyAlias] = i
+		}
+		child[valAlias] = items[i]
+		body(w, root)
+	}
+	restore()
+}
+
+// pushAliases opens a nested loop scope: a child alias map that inherits the
+// enclosing aliases and folds in the enclosing hot range frame. The returned
+// func restores both, so the outer loop's next iteration still resolves its
+// own variable.
+func (w *Writer) pushAliases() (map[string]any, func()) {
+	prev, prevHas := w.aliases, w.hasRV
+	child := make(map[string]any, len(prev)+4)
 	for k, v := range prev {
 		child[k] = v
 	}
@@ -677,14 +693,7 @@ func runMapSliceW(w *Writer, root map[string]any, keyAlias, valAlias string, ite
 		w.hasRV = false
 	}
 	w.aliases = child
-	for i := 0; i < len(items); i++ {
-		if keyAlias != "" {
-			child[keyAlias] = i
-		}
-		child[valAlias] = items[i]
-		body(w, root)
-	}
-	w.aliases = prev
+	return child, func() { w.aliases, w.hasRV = prev, prevHas }
 }
 
 func runGenericRangeW(w *Writer, root map[string]any, keyAlias, valAlias string, coll any, body, emptyFn RenderFunc) {
@@ -696,66 +705,92 @@ func runGenericRangeW(w *Writer, root map[string]any, keyAlias, valAlias string,
 	}
 	switch c := coll.(type) {
 	case []any:
-		runAnySliceW(w, root, keyAlias, valAlias, c, body)
+		runPairsW(w, root, keyAlias, valAlias, nil, c, body)
+		return
 	case []string:
-		for i := 0; i < len(c); i++ {
-			_ = i
-		}
 		items := make([]any, len(c))
 		for i := range c {
 			items[i] = c[i]
 		}
-		runAnySliceW(w, root, keyAlias, valAlias, items, body)
-	default:
-		rv := reflect.ValueOf(coll)
-		for rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface {
-			if rv.IsNil() {
-				return
-			}
-			rv = rv.Elem()
+		runPairsW(w, root, keyAlias, valAlias, nil, items, body)
+		return
+	case map[string]any:
+		names := make([]string, 0, len(c))
+		for k := range c {
+			names = append(names, k)
 		}
-		if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
-			n := rv.Len()
-			items := make([]any, n)
-			for i := 0; i < n; i++ {
-				items[i] = rv.Index(i).Interface()
-			}
-			runAnySliceW(w, root, keyAlias, valAlias, items, body)
+		sort.Strings(names)
+		keys, vals := make([]any, len(names)), make([]any, len(names))
+		for i, k := range names {
+			keys[i], vals[i] = k, c[k]
 		}
+		runPairsW(w, root, keyAlias, valAlias, keys, vals, body)
+		return
+	}
+	rv := reflect.ValueOf(coll)
+	for rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface {
+		if rv.IsNil() {
+			return
+		}
+		rv = rv.Elem()
+	}
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+		n := rv.Len()
+		items := make([]any, n)
+		for i := 0; i < n; i++ {
+			items[i] = rv.Index(i).Interface()
+		}
+		runPairsW(w, root, keyAlias, valAlias, nil, items, body)
+	case reflect.Map:
+		mk := rv.MapKeys()
+		if rv.Type().Key().Kind() == reflect.String {
+			sort.Slice(mk, func(i, j int) bool { return mk[i].String() < mk[j].String() })
+		}
+		keys, vals := make([]any, len(mk)), make([]any, len(mk))
+		for i, k := range mk {
+			keys[i], vals[i] = k.Interface(), rv.MapIndex(k).Interface()
+		}
+		runPairsW(w, root, keyAlias, valAlias, keys, vals, body)
 	}
 }
 
-func runAnySliceW(w *Writer, root map[string]any, keyAlias, valAlias string, items []any, body RenderFunc) {
+// runPairsW runs body once per value. The key alias is the index when keys
+// is nil, the map key otherwise.
+func runPairsW(w *Writer, root map[string]any, keyAlias, valAlias string, keys, vals []any, body RenderFunc) {
 	if w.aliases == nil && !w.hasRV {
 		prevRV, prevRK, prevRI, prevRKI := w.rv, w.rk, w.ri, w.rki
 		w.hasRV = true
 		w.rk = valAlias
 		w.rki = keyAlias
-		for i := 0; i < len(items); i++ {
+		for i := 0; i < len(vals); i++ {
 			if keyAlias != "" {
-				w.ri = i
+				if keys != nil {
+					w.ri = keys[i]
+				} else {
+					w.ri = i
+				}
 			}
-			w.rv = items[i]
+			w.rv = vals[i]
 			body(w, root)
 		}
 		w.hasRV = false
 		w.rv, w.rk, w.ri, w.rki = prevRV, prevRK, prevRI, prevRKI
 		return
 	}
-	prev := w.aliases
-	child := make(map[string]any, 4)
-	for k, v := range prev {
-		child[k] = v
-	}
-	w.aliases = child
-	for i := 0; i < len(items); i++ {
+	child, restore := w.pushAliases()
+	for i := 0; i < len(vals); i++ {
 		if keyAlias != "" {
-			child[keyAlias] = i
+			if keys != nil {
+				child[keyAlias] = keys[i]
+			} else {
+				child[keyAlias] = i
+			}
 		}
-		child[valAlias] = items[i]
+		child[valAlias] = vals[i]
 		body(w, root)
 	}
-	w.aliases = prev
+	restore()
 }
 
 func astSimpleEcho(expr string) bool {
@@ -878,10 +913,44 @@ func wLookup(w *Writer, root map[string]any, path []string) any {
 			}
 			cur = v
 		default:
-			return nil
+			v, ok := reflectField(cur, part)
+			if !ok {
+				return nil
+			}
+			cur = v
 		}
 	}
 	return cur
+}
+
+// reflectField reads part from a string-keyed map or an exported struct
+// field, through pointers and interfaces.
+func reflectField(cur any, part string) (any, bool) {
+	rv := reflect.ValueOf(cur)
+	for rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface {
+		if rv.IsNil() {
+			return nil, false
+		}
+		rv = rv.Elem()
+	}
+	switch rv.Kind() {
+	case reflect.Map:
+		if rv.Type().Key().Kind() != reflect.String {
+			return nil, false
+		}
+		v := rv.MapIndex(reflect.ValueOf(part).Convert(rv.Type().Key()))
+		if !v.IsValid() {
+			return nil, false
+		}
+		return v.Interface(), true
+	case reflect.Struct:
+		f := rv.FieldByName(part)
+		if !f.IsValid() || !f.CanInterface() {
+			return nil, false
+		}
+		return f.Interface(), true
+	}
+	return nil, false
 }
 
 func wIsset(w *Writer, root map[string]any, path []string) bool {
