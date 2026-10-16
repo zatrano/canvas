@@ -17,10 +17,10 @@ func TestPublishedCanvasBench(t *testing.T) {
 	for _, piece := range []string{
 		"Current release is **v1.0.0**",
 		"go get github.com/zatrano/canvas@v1.0.0",
-		"CanvasTyped / quicktemplate | **3.69×**",
-		"Typed vs quicktemplate | ≥ 2.0×",
-		"Dynamic `RenderTo` vs quicktemplate | ≥ 1.05×",
-		"Dynamic vs `html/template`+dataGet | ≥ 20×",
+		"| Typed list, gate | 1061 ns | 3913 ns | — | 3.69× |",
+		"| Dynamic `RenderTo`, gate | 4865 ns | 3870 ns | — | 0.80× |",
+		"| Typed vs quicktemplate | ≥ 2.0× |",
+		"| Dynamic `RenderTo` vs quicktemplate | ≥ 1.05× |",
 	} {
 		if !strings.Contains(text, piece) {
 			t.Fatalf("README is missing %s", piece)
